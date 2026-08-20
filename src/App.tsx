@@ -7,6 +7,7 @@ import {
   RegisterPage,
   DashboardPage,
   LeaguesPage,
+  CreateLeaguePage,
   LeagueDetailPage,
   TeamDetailPage,
   ProfilePage,
@@ -31,7 +32,16 @@ export default function App() {
               </DashboardLayout>
             </ProtectedRoute>
           }
-        />
+        /><Route
+  path="/dashboard/leagues/create"
+  element={
+    <ProtectedRoute>
+      <DashboardLayout>
+        <CreateLeaguePage />
+      </DashboardLayout>
+    </ProtectedRoute>
+  }
+/>
         <Route
           path="/dashboard/leagues"
           element={
