@@ -1,0 +1,115 @@
+import { League, LeagueFormat, Sport } from '@/types';
+import { storageService } from './storageService';
+import { STORAGE_KEYS } from './storageKeys';
+import { seedLeagues } from '@/data';
+import { memberService } from './memberService';
+import { seasonService } from './seasonService';
+import { auditService } from './auditService';
+
+function readLeagues(): League[] {
+  return storageService.getCollection<League>(STORAGE_KEYS.leagues, seedLeagues);
+}
+
+function writeLeagues(leagues: League[]): void {
+  storageService.setItem(STORAGE_KEYS.leagues, leagues);
+}
+
+function generateInviteCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+async function getLeagues(): Promise<League[]> {
+  return readLeagues();
+}
+
+async function getLeagueById(id: string): Promise<League | null> {
+  return readLeagues().find((league) => league.id === id) ?? null;
+}
+
+async function getLeagueByInviteCode(code: string): Promise<League | null> {
+  return readLeagues().find((league) => league.inviteCode.toUpperCase() === code.toUpperCase()) ?? null;
+}
+
+interface CreateLeagueInput {
+  name: string;
+  description: string;
+  sport: Sport;
+  color: string;
+  logoUrl: string | null;
+  isPublic: boolean;
+  inviteCode: string | null;
+  format: LeagueFormat;
+  ownerId: string;
+}
+
+async function createLeague(input: CreateLeagueInput): Promise<League> {
+  const leagues = readLeagues();
+  const league: League = {
+    id: `league-${Date.now()}`,
+    name: input.name.trim(),
+    description: input.description.trim(),
+    sport: input.sport,
+    color: input.color,
+    logoUrl: input.logoUrl,
+    isPublic: input.isPublic,
+    inviteCode: input.inviteCode?.trim() || generateInviteCode(),
+    format: input.format,
+    status: 'active',
+    ownerId: input.ownerId,
+    seasonId: null,
+    createdAt: new Date().toISOString(),
+  };
+  writeLeagues([...leagues, league]);
+
+  memberService.createMember(league.id, input.ownerId, 'owner');
+
+  const season = seasonService.create(league.id, 'Temporada 1');
+  seasonService.activate(season.id);
+  writeLeagues(readLeagues().map((l) => (l.id === league.id ? { ...l, seasonId: season.id } : l)));
+
+  auditService.log(league.id, input.ownerId, 'league_created', `Liga "${league.name}" creada.`);
+
+  return { ...league, seasonId: season.id };
+}
+
+async function updateLeague(id: string, updates: Partial<League>): Promise<League> {
+  const leagues = readLeagues();
+  const league = leagues.find((l) => l.id === id);
+  if (!league) throw new Error('Liga no encontrada.');
+  const updated = { ...league, ...updates, id: league.id, ownerId: league.ownerId };
+  writeLeagues(leagues.map((l) => (l.id === id ? updated : l)));
+  return updated;
+}
+
+async function togglePause(id: string, actorId: string): Promise<League> {
+  const leagues = readLeagues();
+  const league = leagues.find((l) => l.id === id);
+  if (!league) throw new Error('Liga no encontrada.');
+  const newStatus = league.status === 'active' ? 'paused' : 'active';
+  const updated = { ...league, status: newStatus };
+  writeLeagues(leagues.map((l) => (l.id === id ? updated : l)));
+  auditService.log(id, actorId, newStatus === 'paused' ? 'league_paused' : 'league_resumed', `Liga ${newStatus === 'paused' ? 'pausada' : 'reanudada'}.`);
+  return updated;
+}
+
+async function getLeaguesByUser(userId: string): Promise<League[]> {
+  const memberships = await memberService.getMembershipsByUser(userId);
+  const leagueIds = memberships.map((m) => m.leagueId);
+  return readLeagues().filter((l) => leagueIds.includes(l.id));
+}
+
+export const leagueService = {
+  getLeagues,
+  getLeagueById,
+  getLeagueByInviteCode,
+  createLeague,
+  updateLeague,
+  togglePause,
+  getLeaguesByUser,
+  generateInviteCode,
+};
