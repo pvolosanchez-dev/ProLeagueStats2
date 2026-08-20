@@ -11,8 +11,8 @@ interface DashboardLayoutProps {
 const navItems = [
   { to: '/dashboard', label: 'Resumen', icon: LayoutDashboard, end: true },
   { to: '/dashboard/leagues', label: 'Mis Ligas', icon: Trophy, end: false },
-  { to: '/dashboard/create-league', label: 'Crear Liga', icon: Plus, end: false },
-  { to: '/dashboard/join-league', label: 'Unirse a Liga', icon: Search, end: false },
+  { to: '/dashboard/leagues/create', label: 'Crear Liga', icon: Plus, end: false },
+  { to: '/dashboard/leagues', label: 'Unirse a Liga', icon: Search, end: false },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
