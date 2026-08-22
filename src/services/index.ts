@@ -13,4 +13,5 @@ export { auditService } from './auditService';
 export { seasonService } from './seasonService';
 export { awardService } from './awardService';
 export { statsService } from './statsService';
+export { matchPlayerStatsService } from './matchPlayerStatsService';
 export { imageService } from './imageService';

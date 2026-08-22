@@ -2,6 +2,24 @@ import { LoginCredentials, RegisterData, Session, StoredUser, User } from '@/typ
 import { storageService } from './storageService';
 import { STORAGE_KEYS } from './storageKeys';
 import { seedUsers } from '@/data';
+const SESSION_KEY = 'proleaguestats:session';
+
+function getSession(): Session | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setSession(session: Session): void {
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function clearSession(): void {
+  sessionStorage.removeItem(SESSION_KEY);
+}
 
 function readUsers(): StoredUser[] {
   return storageService.getCollection<StoredUser>(STORAGE_KEYS.users, seedUsers);
@@ -17,7 +35,7 @@ function toPublicUser(user: StoredUser): User {
 }
 
 async function getCurrentUser(): Promise<User | null> {
-  const session = storageService.getItem<Session | null>(STORAGE_KEYS.session, null);
+  const session = getSession();
   if (!session) return null;
   const user = readUsers().find((candidate) => candidate.id === session.userId);
   return user ? toPublicUser(user) : null;
@@ -28,7 +46,7 @@ async function login({ email, password }: LoginCredentials): Promise<User> {
   if (!user || user.password !== password) {
     throw new Error('Correo o contraseña incorrectos.');
   }
-  storageService.setItem<Session>(STORAGE_KEYS.session, { userId: user.id });
+  setSession({ userId: user.id });
   return toPublicUser(user);
 }
 
@@ -48,12 +66,12 @@ async function register({ name, email, password }: RegisterData): Promise<User> 
     createdAt: new Date().toISOString(),
   };
   writeUsers([...users, newUser]);
-  storageService.setItem<Session>(STORAGE_KEYS.session, { userId: newUser.id });
+  setSession({ userId: newUser.id });
   return toPublicUser(newUser);
 }
 
 async function logout(): Promise<void> {
-  storageService.removeItem(STORAGE_KEYS.session);
+  clearSession();
 }
 
 async function loginAsDemo(email: string): Promise<User> {

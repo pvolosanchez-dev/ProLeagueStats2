@@ -30,6 +30,7 @@ async function getPlayerById(id: string): Promise<Player | null> {
 
 interface NewPlayerInput {
   teamId: string;
+  userId?: string | null;
   name: string;
   position: Position;
   jerseyNumber: number;
@@ -40,7 +41,7 @@ async function addPlayer(input: NewPlayerInput): Promise<Player> {
   const players = readPlayers();
   const newPlayer: Player = {
     id: `player-${Date.now()}`,
-    userId: null,
+    userId: input.userId ?? null,
     teamId: input.teamId,
     name: input.name.trim(),
     position: input.position,
@@ -60,12 +61,32 @@ async function addPlayer(input: NewPlayerInput): Promise<Player> {
   return newPlayer;
 }
 
-async function updatePlayer(id: string, updates: Partial<Player>): Promise<Player> {
+async function updatePlayer(
+  id: string,
+  updates: Partial<Player>,
+): Promise<Player> {
   const players = readPlayers();
-  const player = players.find((p) => p.id === id);
-  if (!player) throw new Error('Jugador no encontrado.');
-  const updated = { ...player, ...updates, id: player.id, teamId: player.teamId };
-  writePlayers(players.map((p) => (p.id === id ? updated : p)));
+
+  const player = players.find(
+    (p) => p.id === id,
+  );
+
+  if (!player) {
+    throw new Error('Jugador no encontrado.');
+  }
+
+  const updated: Player = {
+    ...player,
+    ...updates,
+    id: player.id,
+  };
+
+  writePlayers(
+    players.map((p) =>
+      p.id === id ? updated : p,
+    ),
+  );
+
   return updated;
 }
 

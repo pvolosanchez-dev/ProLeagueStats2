@@ -1,6 +1,15 @@
 import { ReactNode, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Trophy, Menu, X, LayoutDashboard, LogOut, User as UserIcon, Plus, Bell, Search } from 'lucide-react';
+import {
+  Trophy,
+  Menu,
+  X,
+  LayoutDashboard,
+  LogOut,
+  User as UserIcon,
+  Plus,
+  Bell,
+} from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { Avatar, NotificationBell } from '@/components';
 
@@ -9,10 +18,24 @@ interface DashboardLayoutProps {
 }
 
 const navItems = [
-  { to: '/dashboard', label: 'Resumen', icon: LayoutDashboard, end: true },
-  { to: '/dashboard/leagues', label: 'Mis Ligas', icon: Trophy, end: false },
-  { to: '/dashboard/leagues/create', label: 'Crear Liga', icon: Plus, end: false },
-  { to: '/dashboard/leagues', label: 'Unirse a Liga', icon: Search, end: false },
+  {
+    to: '/dashboard',
+    label: 'Resumen',
+    icon: LayoutDashboard,
+    end: true,
+  },
+  {
+    to: '/dashboard/leagues',
+    label: 'Mis Ligas',
+    icon: Trophy,
+    end: true,
+  },
+  {
+    to: '/dashboard/leagues/create',
+    label: 'Crear Liga',
+    icon: Plus,
+    end: true,
+  },
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {

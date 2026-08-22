@@ -97,6 +97,35 @@ async function togglePause(id: string, actorId: string): Promise<League> {
   return updated;
 }
 
+async function deleteLeague(
+  id: string,
+  actorId: string,
+): Promise<void> {
+  const leagues = readLeagues();
+  const league = leagues.find((l) => l.id === id);
+
+  if (!league) {
+    throw new Error('Liga no encontrada.');
+  }
+
+  if (league.ownerId !== actorId) {
+    throw new Error(
+      'Solo el propietario puede eliminar esta liga.',
+    );
+  }
+
+  writeLeagues(
+    leagues.filter((l) => l.id !== id),
+  );
+
+  auditService.log(
+    id,
+    actorId,
+    'league_deleted',
+    `Liga "${league.name}" eliminada.`,
+  );
+}
+
 async function getLeaguesByUser(userId: string): Promise<League[]> {
   const memberships = await memberService.getMembershipsByUser(userId);
   const leagueIds = memberships.map((m) => m.leagueId);
@@ -110,6 +139,7 @@ export const leagueService = {
   createLeague,
   updateLeague,
   togglePause,
+  deleteLeague,
   getLeaguesByUser,
   generateInviteCode,
 };

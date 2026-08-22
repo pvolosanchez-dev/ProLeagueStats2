@@ -1,6 +1,8 @@
 import { LeagueJoinRequest, TeamJoinRequest, RequestStatus } from '@/types';
 import { storageService } from './storageService';
 import { STORAGE_KEYS } from './storageKeys';
+import { leagueService } from './leagueService';
+import { teamService } from './teamService';
 
 function readLeagueRequests(): LeagueJoinRequest[] {
   return storageService.getCollection<LeagueJoinRequest>(STORAGE_KEYS.leagueRequests, []);
@@ -18,7 +20,23 @@ function writeTeamRequests(requests: TeamJoinRequest[]): void {
   storageService.setItem(STORAGE_KEYS.teamRequests, requests);
 }
 
-async function createLeagueRequest(leagueId: string, userId: string, message: string): Promise<LeagueJoinRequest> {
+async function createLeagueRequest(
+  leagueId: string,
+  userId: string,
+  message: string,
+): Promise<LeagueJoinRequest> {
+  const league = await leagueService.getLeagueById(leagueId);
+
+  if (!league) {
+    throw new Error('Liga no encontrada.');
+  }
+
+  if (league.status === 'paused') {
+    throw new Error(
+      'La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.',
+    );
+  }
+
   const requests = readLeagueRequests();
   const existing = requests.find(
     (r) => r.leagueId === leagueId && r.userId === userId && r.status === 'pending',
@@ -68,7 +86,36 @@ function cancelLeagueRequest(requestId: string): void {
   writeLeagueRequests(readLeagueRequests().filter((r) => r.id !== requestId));
 }
 
-async function createTeamRequest(teamId: string, leagueId: string, userId: string, message: string): Promise<TeamJoinRequest> {
+async function createTeamRequest(
+  teamId: string,
+  leagueId: string,
+  userId: string,
+  message: string,
+): Promise<TeamJoinRequest> {
+  const league = await leagueService.getLeagueById(leagueId);
+
+  if (!league) {
+    throw new Error('Liga no encontrada.');
+  }
+
+  if (league.status === 'paused') {
+    throw new Error(
+      'La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.',
+    );
+  }
+
+  const team = await teamService.getTeamById(teamId);
+
+  if (!team) {
+    throw new Error('Equipo no encontrado.');
+  }
+
+  if (team.leagueId !== leagueId) {
+    throw new Error(
+      'El equipo no pertenece a esta liga.',
+    );
+  }
+
   const requests = readTeamRequests();
   const existing = requests.find(
     (r) => r.teamId === teamId && r.userId === userId && r.status === 'pending',

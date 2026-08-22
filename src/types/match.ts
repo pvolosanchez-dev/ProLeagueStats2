@@ -1,4 +1,6 @@
-export type MatchStatus = 'scheduled' | 'finished';
+export type MatchStatus =
+  | 'scheduled'
+  | 'finished';
 
 export interface Match {
   id: string;
@@ -13,4 +15,5 @@ export interface Match {
   awayScore: number | null;
   status: MatchStatus;
   mvpPlayerId: string | null;
+  wentToOvertime: boolean;
 }

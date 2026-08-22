@@ -1,12 +1,13 @@
-export type Position = 'Portero' | 'Defensa' | 'Mediocampista' | 'Delantero';
+export type Position =
+  | 'Portero'
+  | 'Defensa'
+  | 'Mediocampista'
+  | 'Delantero';
 
 export interface PlayerStats {
   gamesPlayed: number;
   goals: number;
   assists: number;
-  yellowCards: number;
-  redCards: number;
-  minutesPlayed: number;
   mvpAwards: number;
 }
 

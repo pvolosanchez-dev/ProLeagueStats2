@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   players: 'players',
   matches: 'matches',
   members: 'members',
+  matchPlayerStats: 'matchPlayerStats',
   leagueRequests: 'leagueRequests',
   teamRequests: 'teamRequests',
   notifications: 'notifications',
