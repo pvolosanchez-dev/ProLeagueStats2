@@ -61,9 +61,25 @@ async function addPlayer(input: NewPlayerInput): Promise<Player> {
   return newPlayer;
 }
 
+interface UpdatePlayerInput extends Partial<Player> {
+  resetStats?: boolean;
+}
+
+function getEmptySeasonStats(): Player['stats'] {
+  return {
+    gamesPlayed: 0,
+    goals: 0,
+    assists: 0,
+    yellowCards: 0,
+    redCards: 0,
+    minutesPlayed: 0,
+    mvpAwards: 0,
+  };
+}
+
 async function updatePlayer(
   id: string,
-  updates: Partial<Player>,
+  updates: UpdatePlayerInput,
 ): Promise<Player> {
   const players = readPlayers();
 
@@ -75,10 +91,15 @@ async function updatePlayer(
     throw new Error('Jugador no encontrado.');
   }
 
+  const { resetStats, ...playerUpdates } = updates;
+
   const updated: Player = {
     ...player,
-    ...updates,
+    ...playerUpdates,
     id: player.id,
+    stats: resetStats
+      ? getEmptySeasonStats()
+      : playerUpdates.stats ?? player.stats,
   };
 
   writePlayers(
