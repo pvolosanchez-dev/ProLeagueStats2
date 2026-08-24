@@ -7,3 +7,4 @@ export { LeagueDetailPage } from './LeagueDetailPage';
 export { TeamDetailPage } from './TeamDetailPage';
 export { ProfilePage } from './ProfilePage';
 export { CreateLeaguePage } from './CreateLeaguePage';
+export { AwardsPage } from './AwardsPage';
