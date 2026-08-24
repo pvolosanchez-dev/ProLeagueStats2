@@ -7,10 +7,7 @@ export type AwardType =
   | 'top_assister'
   | 'best_goalkeeper';
 
-export type AwardVotingStatus =
-  | 'not_started'
-  | 'open'
-  | 'closed';
+export type AwardVotingStatus = 'not_started' | 'open' | 'closed';
 
 export interface AwardCandidate {
   playerId: string;
@@ -22,7 +19,7 @@ export interface AwardCandidate {
   assists: number;
   mvpAwards: number;
   performancePoints: number;
-  pointBreakdown: { label: string; points: number }[];
+  pointBreakdown?: { label: string; points: number }[];
   tournamentStage?: string;
   tournamentPosition?: number | null;
   rank: number;
