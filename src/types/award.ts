@@ -23,8 +23,8 @@ export interface AwardCandidate {
   mvpAwards: number;
   performancePoints: number;
   pointBreakdown?: { label: string; points: number }[];
-  tournamentStage: string;
-  tournamentPosition: number | null;
+  tournamentStage?: string;
+  tournamentPosition?: number | null;
   rank: number;
 }
 
