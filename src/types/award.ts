@@ -1,9 +1,12 @@
 export type AwardType =
   | 'ballon_or'
-  | 'best_player'
-  | 'top_scorer'
-  | 'top_assister'
-  | 'best_goalkeeper';
+  | 'golden_boot'
+  | 'puskas';
+
+export type AwardVotingStatus =
+  | 'not_started'
+  | 'open'
+  | 'closed';
 
 export interface AwardCandidate {
   playerId: string;
@@ -15,22 +18,82 @@ export interface AwardCandidate {
   assists: number;
   mvpAwards: number;
   performancePoints: number;
-  pointBreakdown: { label: string; points: number }[];
+  tournamentStage: string;
+  tournamentPosition: number | null;
   rank: number;
+}
+
+export interface PuskasNomination {
+  id: string;
+  leagueId: string;
+  seasonId: string;
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  nominatedByUserId: string;
+  createdAt: string;
+  voteCount: number;
+  isWinner: boolean;
+  winningVideoUrl: string | null;
+  winningVideoDurationSeconds: number | null;
+}
+
+export interface AwardVote {
+  id: string;
+  leagueId: string;
+  seasonId: string;
+  awardType: AwardType;
+  voterUserId: string | null;
+  candidatePlayerId: string;
+  automatic: boolean;
+  weight: number;
+  createdAt: string;
+}
+
+export interface SeasonAward {
+  id: string;
+  leagueId: string;
+  seasonId: string;
+  type: AwardType;
+  winnerPlayerId: string | null;
+  votingStatus: AwardVotingStatus;
+  votingStartedAt: string | null;
+  votingEndsAt: string | null;
+  winnerVoteCount: number;
+  winningVideoUrl: string | null;
+  winningVideoDurationSeconds: number | null;
+  createdAt: string;
+  finalizedAt: string | null;
 }
 
 export const AWARD_LABELS: Record<AwardType, string> = {
   ballon_or: 'Balón de Oro',
-  best_player: 'Mejor Jugador',
-  top_scorer: 'Mejor Goleador',
-  top_assister: 'Mejor Asistente',
-  best_goalkeeper: 'Mejor Portero',
+  golden_boot: 'Bota de Oro',
+  puskas: 'Premio Puskás',
 };
 
 export const AWARD_DESCRIPTIONS: Record<AwardType, string> = {
-  ballon_or: 'El premio al jugador más completo de la temporada según rendimiento.',
-  best_player: 'El jugador con mayor impacto en los partidos.',
-  top_scorer: 'El máximo goleador de la temporada.',
-  top_assister: 'El jugador con más asistencias de la temporada.',
-  best_goalkeeper: 'El portero con mejor rendimiento.',
+  ballon_or:
+    'El Top 20 se determina por rendimiento. El ganador final se decide exclusivamente por votos.',
+  golden_boot:
+    'Se determina automáticamente por goles y asistencias.',
+  puskas:
+    'Premio al mejor gol de la temporada mediante nominaciones y votación.',
 };
+
+export const AWARD_POINT_VALUES = {
+  goal: 4,
+  assist: 3,
+  mvp: 5,
+  champion: 10,
+  runnerUp: 5,
+  semifinalist: 2,
+  quarterfinalist: 1,
+} as const;
+
+export const BALLOON_AUTOMATIC_VOTES = [5, 4, 3] as const;
+export const AWARD_VOTING_DURATION_MS = 24 * 60 * 60 * 1000;
+export const MAX_BALLON_CANDIDATES = 20;
+export const MAX_GOLDEN_BOOT_CANDIDATES = 15;
+export const MAX_PUSKAS_NOMINATIONS_PER_PLAYER = 2;
+export const MAX_PUSKAS_VIDEO_DURATION_SECONDS = 30;
