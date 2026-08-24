@@ -12,4 +12,7 @@ export const STORAGE_KEYS = {
   notifications: 'notifications',
   auditLogs: 'auditLogs',
   seasons: 'seasons',
+  seasonAwards: 'seasonAwards',
+  awardVotes: 'awardVotes',
+  puskasNominations: 'puskasNominations',
 } as const;
