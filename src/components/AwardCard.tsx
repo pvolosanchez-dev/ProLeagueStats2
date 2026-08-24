@@ -9,6 +9,7 @@ interface AwardCardProps {
 export function AwardCard({ candidate, showBreakdown = false }: AwardCardProps) {
   const isTop3 = candidate.rank <= 3;
   const rankColors = ['#f59e0b', '#94a3b8', '#b45309'];
+  const breakdown = candidate.pointBreakdown ?? [];
 
   return (
     <div className={`card p-4 ${isTop3 ? 'ring-2' : ''}`} style={isTop3 ? { boxShadow: `0 0 0 2px ${rankColors[candidate.rank - 1]}` } : {}}>
@@ -45,9 +46,9 @@ export function AwardCard({ candidate, showBreakdown = false }: AwardCardProps) 
         </div>
       </div>
 
-      {showBreakdown && candidate.pointBreakdown.length > 0 && (
+      {showBreakdown && breakdown.length > 0 && (
         <div className="mt-3 space-y-1 border-t border-neutral-100 pt-3">
-          {candidate.pointBreakdown.map((item, i) => (
+          {breakdown.map((item, i) => (
             <div key={i} className="flex items-center justify-between text-xs">
               <span className="text-neutral-500">{item.label}</span>
               <span className="font-medium text-neutral-700">+{item.points}</span>
