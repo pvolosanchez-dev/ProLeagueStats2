@@ -7,6 +7,7 @@ import {
   FORMAT_DESCRIPTIONS,
   FORMAT_LABELS,
   LeagueFormat,
+  PlayoffFormatConfig,
 } from '@/types';
 
 const SPORT = 'Fútbol';
@@ -23,13 +24,25 @@ export function CreateLeaguePage() {
   const { user } = useAuth();
 
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [color, setColor] = useState('#2563eb');
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [isPublic, setIsPublic] = useState(true);
-  const [inviteCode, setInviteCode] = useState('');
+  const [description, setDescription] =
+    useState('');
+  const [color, setColor] =
+    useState('#2563eb');
+  const [logoUrl, setLogoUrl] =
+    useState<string | null>(null);
+  const [isPublic, setIsPublic] =
+    useState(true);
+  const [inviteCode, setInviteCode] =
+    useState('');
   const [format, setFormat] =
     useState<LeagueFormat>('league');
+
+  const [playoffFormat, setPlayoffFormat] =
+  useState<PlayoffFormatConfig>({
+    quarterfinal: 'single-match',
+    semifinal: 'single-match',
+    final: 'single-match',
+  });
 
   const [submitting, setSubmitting] =
     useState(false);
@@ -42,7 +55,9 @@ export function CreateLeaguePage() {
   ) => {
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (
+      !file.type.startsWith('image/')
+    ) {
       setError(
         'El archivo debe ser una imagen.',
       );
@@ -118,6 +133,14 @@ export function CreateLeaguePage() {
           inviteCode:
             inviteCode.trim() || null,
           format,
+         playoffFormat:
+  format === 'league-playoff'
+    ? playoffFormat
+    : {
+        quarterfinal: 'single-match',
+        semifinal: 'single-match',
+        final: 'single-match',
+      },
           ownerId: user.id,
         });
 
@@ -157,8 +180,8 @@ export function CreateLeaguePage() {
 
         <p className="mt-1 text-sm text-neutral-500">
           Configura tu competición y
-          conviértete automáticamente en su
-          propietario.
+          conviértete automáticamente en
+          su propietario.
         </p>
       </div>
 
@@ -249,8 +272,8 @@ export function CreateLeaguePage() {
 
                   <p className="mt-1 text-xs text-neutral-500">
                     LigaMxRL está configurada
-                    exclusivamente para fútbol en
-                    Rocket League.
+                    exclusivamente para fútbol
+                    en Rocket League.
                   </p>
                 </div>
               </div>
@@ -464,6 +487,138 @@ export function CreateLeaguePage() {
               );
             })}
           </div>
+
+          {format === 'league-playoff' && (
+  <div className="rounded-xl border border-neutral-200 p-4">
+    <div>
+      <h3 className="text-sm font-semibold text-neutral-900">
+        Configuración de la liguilla
+      </h3>
+
+      <p className="mt-1 text-xs text-neutral-500">
+        Configura por separado cómo se disputarán
+        cuartos, semifinales y final.
+      </p>
+    </div>
+
+    <div className="mt-4 space-y-4">
+      {[
+        {
+          key: 'quarterfinal' as const,
+          label: 'Cuartos de final',
+          description:
+            '1.º vs 8.º, 2.º vs 7.º, 3.º vs 6.º y 4.º vs 5.º.',
+        },
+        {
+          key: 'semifinal' as const,
+          label: 'Semifinales',
+          description:
+            'Los cuatro equipos clasificados de cuartos.',
+        },
+        {
+          key: 'final' as const,
+          label: 'Final',
+          description:
+            'Los dos equipos que avancen de semifinales.',
+        },
+      ].map((stage) => (
+        <div
+          key={stage.key}
+          className="rounded-xl border border-neutral-200 p-4"
+        >
+          <div>
+            <p className="text-sm font-semibold text-neutral-900">
+              {stage.label}
+            </p>
+
+            <p className="mt-1 text-xs text-neutral-500">
+              {stage.description}
+            </p>
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() =>
+                setPlayoffFormat((current) => ({
+                  ...current,
+                  [stage.key]:
+                    'single-match',
+                }))
+              }
+              className={`rounded-xl border p-3 text-left transition ${
+                playoffFormat[stage.key] ===
+                'single-match'
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-neutral-200 hover:border-neutral-300'
+              }`}
+              disabled={submitting}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-neutral-900">
+                  Partido único
+                </span>
+
+                <span
+                  className={`h-4 w-4 rounded-full border-2 ${
+                    playoffFormat[stage.key] ===
+                    'single-match'
+                      ? 'border-primary-600 bg-primary-600'
+                      : 'border-neutral-300'
+                  }`}
+                />
+              </div>
+
+              <p className="mt-1 text-xs text-neutral-500">
+                El cruce se decide en un solo
+                partido.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPlayoffFormat((current) => ({
+                  ...current,
+                  [stage.key]:
+                    'home-and-away',
+                }))
+              }
+              className={`rounded-xl border p-3 text-left transition ${
+                playoffFormat[stage.key] ===
+                'home-and-away'
+                  ? 'border-primary-600 bg-primary-50'
+                  : 'border-neutral-200 hover:border-neutral-300'
+              }`}
+              disabled={submitting}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-neutral-900">
+                  Ida y vuelta
+                </span>
+
+                <span
+                  className={`h-4 w-4 rounded-full border-2 ${
+                    playoffFormat[stage.key] ===
+                    'home-and-away'
+                      ? 'border-primary-600 bg-primary-600'
+                      : 'border-neutral-300'
+                  }`}
+                />
+              </div>
+
+              <p className="mt-1 text-xs text-neutral-500">
+                El ganador se determina por el
+                marcador global.
+              </p>
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+          
         </section>
 
         <div className="flex justify-end gap-3">

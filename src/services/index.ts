@@ -11,7 +11,11 @@ export { joinRequestService } from './joinRequestService';
 export { notificationService } from './notificationService';
 export { auditService } from './auditService';
 export { seasonService } from './seasonService';
+export { playoffService } from './playoffService';
 export { awardService } from './awardService';
 export { statsService } from './statsService';
 export { matchPlayerStatsService } from './matchPlayerStatsService';
 export { imageService } from './imageService';
+export {
+  playoffSeriesService,
+} from './playoffSeriesService';

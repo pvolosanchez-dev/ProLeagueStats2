@@ -6,6 +6,9 @@ import { auditService } from './auditService';
 import { leagueService } from './leagueService';
 import { teamService } from './teamService';
 import { memberService } from './memberService';
+import { seasonService } from './seasonService';
+import { isRegularSeasonComplete } from '@/utils/regularSeason';
+import { playoffService } from './playoffService';
 
 function readMatches(): Match[] {
   return storageService.getCollection<Match>(
@@ -188,25 +191,30 @@ async function createMatch(
   }
 
   const match: Match = {
-    id: `match-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 7)}`,
-    leagueId: input.leagueId,
-    seasonId:
-      input.seasonId ??
-      league.seasonId ??
-      null,
-    round: input.round,
-    date: input.date,
-    venue: input.venue.trim(),
-    homeTeamId: input.homeTeamId,
-    awayTeamId: input.awayTeamId,
-    homeScore: null,
-    awayScore: null,
-    status: 'scheduled',
-    mvpPlayerId: null,
-    wentToOvertime: false,
-  };
+  id: `match-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`,
+  leagueId: input.leagueId,
+  seasonId:
+    input.seasonId ??
+    league.seasonId ??
+    null,
+  round: input.round,
+  date: input.date,
+  venue: input.venue.trim(),
+  homeTeamId: input.homeTeamId,
+  awayTeamId: input.awayTeamId,
+  homeScore: null,
+  awayScore: null,
+  status: 'scheduled',
+  mvpPlayerId: null,
+  wentToOvertime: false,
+
+  phase: 'regular',
+  playoffRound: null,
+  playoffSeedHome: null,
+  playoffSeedAway: null,
+};
 
   writeMatches([
     ...matches,
@@ -358,14 +366,118 @@ async function updateScore(
     ),
   );
 
-  if (!wasFinished) {
-    auditService.log(
-      match.leagueId,
-      actorId,
-      'match_registered',
-      `Resultado registrado: ${input.homeScore}-${input.awayScore}.`,
-    );
+if (!wasFinished) {
+  auditService.log(
+    match.leagueId,
+    actorId,
+    'match_registered',
+    `Resultado registrado: ${input.homeScore}-${input.awayScore}.`,
+  );
+
+  /*
+   * Comprobar si la fase regular terminó.
+   *
+   * Solo se ejecuta cuando se registra
+   * un partido por primera vez.
+   */
+  if (league.seasonId) {
+    const season =
+      await seasonService.getActiveSeason(
+        league.id,
+      );
+
+    if (
+      season &&
+      season.phase === 'regular'
+    ) {
+      const leagueTeams =
+        await teamService.getTeamsByLeague(
+          league.id,
+        );
+
+      const allLeagueMatches =
+        readMatches();
+
+      const regularSeasonComplete =
+        isRegularSeasonComplete(
+          leagueTeams.map(
+            (team) => team.id,
+          ),
+          allLeagueMatches.filter(
+            (leagueMatch) =>
+              leagueMatch.leagueId ===
+              league.id,
+          ),
+        );
+
+      if (
+        regularSeasonComplete
+      ) {
+        if (
+          league.format ===
+          'league-playoff'
+        ) {
+         seasonService.setPhase(
+  season.id,
+  'playoff',
+);
+
+await playoffService.generateTop8Playoff(
+  league.id,
+  season.id,
+  actorId,
+);
+
+auditService.log(
+  league.id,
+  actorId,
+  'regular_season_finished',
+  'La fase regular terminó y se generó la liguilla Top 8.',
+);
+        } else if (
+          league.format ===
+          'league-knockout'
+        ) {
+          seasonService.setPhase(
+            season.id,
+            'knockout',
+          );
+
+          auditService.log(
+            league.id,
+            actorId,
+            'regular_season_finished',
+            'La fase regular terminó. La liga pasó a fase de eliminación.',
+          );
+        } else if (
+          league.format === 'league'
+        ) {
+          seasonService.finish(
+            season.id,
+          );
+
+          auditService.log(
+            league.id,
+            actorId,
+            'season_finished',
+            'La fase regular terminó y la temporada fue finalizada.',
+          );
+        }
+      }
+    }
   }
+}
+if (
+  !wasFinished &&
+  updatedMatch.phase === 'playoff' &&
+  updatedMatch.seasonId
+) {
+  await playoffService.advancePlayoffRound(
+    league.id,
+    updatedMatch.seasonId,
+    actorId,
+  );
+}
 
   return updatedMatch;
 }

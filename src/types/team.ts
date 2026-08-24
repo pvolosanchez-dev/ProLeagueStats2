@@ -9,4 +9,5 @@ export interface Team {
   description: string;
   captainId: string | null;
   createdAt: string;
+  bannerUrl: string | null;
 }

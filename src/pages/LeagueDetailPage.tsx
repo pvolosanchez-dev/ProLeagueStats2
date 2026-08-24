@@ -2806,3 +2806,219 @@ function AssignMemberTeamModal({
     </Modal>
   );
 }
+
+function CreateTeamModal({
+  leagueId,
+  actorId,
+  onClose,
+  onCreated,
+}: {
+  leagueId: string;
+  actorId: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [shortName, setShortName] = useState('');
+  const [city, setCity] = useState('');
+  const [color, setColor] = useState('#2563eb');
+  const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (
+    event: FormEvent,
+  ) => {
+    event.preventDefault();
+
+    if (
+      !name.trim() ||
+      !shortName.trim() ||
+      !city.trim()
+    ) {
+      setError(
+        'Completa nombre, nombre corto y ciudad.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await teamService.createTeam(
+        {
+          leagueId,
+          name: name.trim(),
+          shortName: shortName.trim(),
+          city: city.trim(),
+          color,
+          logoUrl: null,
+          description: description.trim(),
+        },
+        actorId,
+      );
+
+      onCreated();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo crear el equipo.',
+      );
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Crear equipo"
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary"
+            disabled={submitting}
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="submit"
+            form="create-team-form"
+            className="btn-primary"
+            disabled={submitting}
+          >
+            {submitting ? (
+              <Spinner />
+            ) : (
+              'Crear equipo'
+            )}
+          </button>
+        </>
+      }
+    >
+      {error && (
+        <div className="mb-4 rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-700">
+          {error}
+        </div>
+      )}
+
+      <form
+        id="create-team-form"
+        onSubmit={handleSubmit}
+        className="space-y-4"
+      >
+        <div>
+          <label
+            className="label"
+            htmlFor="team-name"
+          >
+            Nombre del equipo
+          </label>
+
+          <input
+            id="team-name"
+            className="input"
+            value={name}
+            onChange={(event) =>
+              setName(event.target.value)
+            }
+            placeholder="Ej. América"
+            maxLength={80}
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label
+            className="label"
+            htmlFor="team-short-name"
+          >
+            Nombre corto
+          </label>
+
+          <input
+            id="team-short-name"
+            className="input"
+            value={shortName}
+            onChange={(event) =>
+              setShortName(
+                event.target.value.slice(0, 4),
+              )
+            }
+            placeholder="AME"
+            maxLength={4}
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label
+            className="label"
+            htmlFor="team-city"
+          >
+            Ciudad
+          </label>
+
+          <input
+            id="team-city"
+            className="input"
+            value={city}
+            onChange={(event) =>
+              setCity(event.target.value)
+            }
+            placeholder="Ciudad de México"
+            maxLength={80}
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label
+            className="label"
+            htmlFor="team-color"
+          >
+            Color
+          </label>
+
+          <input
+            id="team-color"
+            type="color"
+            value={color}
+            onChange={(event) =>
+              setColor(event.target.value)
+            }
+            className="h-10 w-16 cursor-pointer rounded border border-neutral-300"
+            disabled={submitting}
+          />
+        </div>
+
+        <div>
+          <label
+            className="label"
+            htmlFor="team-description"
+          >
+            Descripción
+          </label>
+
+          <textarea
+            id="team-description"
+            className="input min-h-24"
+            value={description}
+            onChange={(event) =>
+              setDescription(
+                event.target.value,
+              )
+            }
+            placeholder="Descripción del equipo..."
+            disabled={submitting}
+          />
+        </div>
+      </form>
+    </Modal>
+  );
+}

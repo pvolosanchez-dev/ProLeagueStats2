@@ -1,11 +1,18 @@
-export type Role = 'owner' | 'admin' | 'captain' | 'player';
+export type Role =
+  | 'owner'
+  | 'admin'
+  | 'captain'
+  | 'player';
 
 export interface User {
   id: string;
   name: string;
+  username: string;
   email: string;
+  bio: string;
   avatarColor: string;
   avatarUrl: string | null;
+profileGifUrl: string | null;
   createdAt: string;
 }
 

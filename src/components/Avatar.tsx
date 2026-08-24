@@ -2,7 +2,10 @@ import { User } from '@/types';
 import { ROLE_LABELS } from '@/utils/roles';
 
 interface AvatarProps {
-  user: Pick<User, 'name' | 'avatarColor'>;
+  user: Pick<
+    User,
+    'name' | 'avatarColor' | 'avatarUrl'
+  >;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -12,7 +15,10 @@ const sizeClasses = {
   lg: 'w-16 h-16 text-xl',
 };
 
-export function Avatar({ user, size = 'md' }: AvatarProps) {
+export function Avatar({
+  user,
+  size = 'md',
+}: AvatarProps) {
   const initials = user.name
     .split(' ')
     .map((part) => part[0])
@@ -22,11 +28,25 @@ export function Avatar({ user, size = 'md' }: AvatarProps) {
 
   return (
     <div
-      className={`${sizeClasses[size]} flex shrink-0 items-center justify-center rounded-full font-semibold text-white shadow-sm`}
-      style={{ backgroundColor: user.avatarColor }}
+      className={`${sizeClasses[size]} flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white shadow-sm`}
+      style={{
+        backgroundColor: user.avatarColor,
+      }}
       title={user.name}
     >
-      {initials}
+      {user.avatarUrl ? (
+        <img
+          src={user.avatarUrl}
+          alt={user.name}
+          className="h-full w-full object-cover"
+          onError={(event) => {
+            event.currentTarget.style.display =
+              'none';
+          }}
+        />
+      ) : (
+        initials
+      )}
     </div>
   );
 }
