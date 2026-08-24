@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart3, CalendarDays, Users, Trophy, Award, UsersRound, Settings, LayoutDashboard } from 'lucide-react';
+import { BarChart3, CalendarDays, Users, Trophy, Award, UsersRound, Settings, LayoutDashboard, WandSparkles } from 'lucide-react';
 
 interface LeagueNavProps {
   leagueId: string;
@@ -18,6 +18,7 @@ const baseItems = [
 ];
 
 const adminItems = [
+  { to: 'schedule-generator', label: 'Generar calendario', icon: WandSparkles, end: false },
   { to: 'admin', label: 'Administración', icon: Settings, end: false },
 ];
 
