@@ -11,6 +11,7 @@ export { joinRequestService } from './joinRequestService';
 export { notificationService } from './notificationService';
 export { auditService } from './auditService';
 export { seasonService } from './seasonService';
+export { scheduleService } from './scheduleService';
 export { playoffService } from './playoffService';
 export { awardService } from './awardService';
 export { awardServiceV2 } from './awardServiceV2';
