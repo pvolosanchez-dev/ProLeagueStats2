@@ -12,6 +12,7 @@ import {
   TeamDetailPage,
   ProfilePage,
   AwardsPage,
+  SchedulePage,
 } from '@/pages';
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/dashboard/leagues" element={<ProtectedRoute><DashboardLayout><LeaguesPage /></DashboardLayout></ProtectedRoute>} />
         <Route path="/dashboard/leagues/:leagueId" element={<ProtectedRoute><DashboardLayout><LeagueDetailPage /></DashboardLayout></ProtectedRoute>} />
         <Route path="/dashboard/leagues/:leagueId/awards" element={<ProtectedRoute><DashboardLayout><AwardsPage /></DashboardLayout></ProtectedRoute>} />
+        <Route path="/dashboard/leagues/:leagueId/schedule-generator" element={<ProtectedRoute><DashboardLayout><SchedulePage /></DashboardLayout></ProtectedRoute>} />
         <Route path="/dashboard/teams/:teamId" element={<ProtectedRoute><DashboardLayout><TeamDetailPage /></DashboardLayout></ProtectedRoute>} />
         <Route path="/dashboard/profile" element={<ProtectedRoute><DashboardLayout><ProfilePage /></DashboardLayout></ProtectedRoute>} />
 
