@@ -13,6 +13,7 @@ export { auditService } from './auditService';
 export { seasonService } from './seasonService';
 export { playoffService } from './playoffService';
 export { awardService } from './awardService';
+export { awardServiceV2 } from './awardServiceV2';
 export { statsService } from './statsService';
 export { matchPlayerStatsService } from './matchPlayerStatsService';
 export { imageService } from './imageService';
