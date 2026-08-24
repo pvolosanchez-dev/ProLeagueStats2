@@ -472,16 +472,16 @@ export function LeagueDetailPage() {
           );
 
         if (existingPlayer) {
-        await playerService.updatePlayer(
-  existingPlayer.id,
-  {
-    teamId,
-    position,
-    jerseyNumber,
-    name: memberUser.name,
-    resetStats: true,
-  },
-);
+          await playerService.updatePlayer(
+            existingPlayer.id,
+            {
+              teamId,
+              position,
+              jerseyNumber,
+              name: memberUser.name,
+              resetStats: true,
+            },
+          );
         } else {
           await playerService.addPlayer({
             teamId,
@@ -676,46 +676,46 @@ export function LeagueDetailPage() {
    * ==========================================
    */
 
- const tabs: {
-  id: Tab;
-  label: string;
-  icon: typeof Trophy;
-}[] = [
-  {
-    id: 'standings',
-    label: 'Tabla',
-    icon: BarChart3,
-  },
-  {
-    id: 'matches',
-    label: 'Partidos',
-    icon: CalendarDays,
-  },
-  {
-    id: 'teams',
-    label: 'Equipos',
-    icon: Users,
-  },
-  {
-    id: 'awards',
-    label: 'Premios',
-    icon: Award,
-  },
-  ...(isAdmin
-    ? [
-        {
-          id: 'schedule-generator' as Tab,
-          label: 'Generar calendario',
-          icon: WandSparkles,
-        },
-        {
-          id: 'admin' as Tab,
-          label: 'Administración',
-          icon: Settings,
-        },
-      ]
-    : []),
-];
+  const tabs: {
+    id: Tab;
+    label: string;
+    icon: typeof Trophy;
+  }[] = [
+    {
+      id: 'standings',
+      label: 'Tabla',
+      icon: BarChart3,
+    },
+    {
+      id: 'matches',
+      label: 'Partidos',
+      icon: CalendarDays,
+    },
+    {
+      id: 'teams',
+      label: 'Equipos',
+      icon: Users,
+    },
+    {
+      id: 'awards',
+      label: 'Premios',
+      icon: Award,
+    },
+    ...(isAdmin
+      ? [
+          {
+            id: 'schedule-generator' as Tab,
+            label: 'Generar calendario',
+            icon: WandSparkles,
+          },
+          {
+            id: 'admin' as Tab,
+            label: 'Administración',
+            icon: Settings,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-fade-in">
@@ -918,31 +918,31 @@ export function LeagueDetailPage() {
               <button
                 key={tabItem.id}
                 type="button"
-             onClick={() => {
-  if (
-    tabItem.id ===
-    'schedule-generator'
-  ) {
-    navigate(
-      `/dashboard/leagues/${league.id}/schedule-generator`,
-    );
-    return;
-  }
+                onClick={() => {
+                  if (
+                    tabItem.id ===
+                    'schedule-generator'
+                  ) {
+                    navigate(
+                      `/dashboard/leagues/${league.id}/schedule-generator`,
+                    );
+                    return;
+                  }
 
-  if (
-    tabItem.id ===
-    'awards'
-  ) {
-    navigate(
-      `/dashboard/leagues/${league.id}/awards`,
-    );
-    return;
-  }
+                  if (
+                    tabItem.id ===
+                    'awards'
+                  ) {
+                    navigate(
+                      `/dashboard/leagues/${league.id}/awards`,
+                    );
+                    return;
+                  }
 
-  setTab(
-    tabItem.id,
-  );
-}}
+                  setTab(
+                    tabItem.id,
+                  );
+                }}
                 className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                   tab ===
                   tabItem.id
@@ -1157,6 +1157,9 @@ export function LeagueDetailPage() {
                       }
                       color={
                         team.color
+                      }
+                      logoUrl={
+                        team.logoUrl
                       }
                       size="lg"
                     />
@@ -2414,7 +2417,7 @@ function ScoreEditModal({
                   name={home.name}
                   shortName={home.shortName}
                   color={home.color}
-                  logoUrl={team.logoUrl}
+                  logoUrl={home.logoUrl}
                   size="lg"
                 />
               )}
@@ -2448,6 +2451,7 @@ function ScoreEditModal({
                   name={away.name}
                   shortName={away.shortName}
                   color={away.color}
+                  logoUrl={away.logoUrl}
                   size="lg"
                 />
               )}
@@ -2873,9 +2877,9 @@ function CreateTeamModal({
   const [city, setCity] = useState('');
   const [color, setColor] = useState('#2563eb');
   const [description, setDescription] = useState('');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   const handleSubmit = async (
     event: FormEvent,
@@ -2904,7 +2908,7 @@ function CreateTeamModal({
           shortName: shortName.trim(),
           city: city.trim(),
           color,
-          logoUrl: logoUrl,
+          logoUrl,
           description: description.trim(),
         },
         actorId,
@@ -2919,6 +2923,54 @@ function CreateTeamModal({
       );
       setSubmitting(false);
     }
+  };
+
+  const handleLogoChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      setLogoUrl(null);
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError(
+        'El archivo seleccionado no es una imagen válida.',
+      );
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError(
+        'El escudo no puede superar 2 MB.',
+      );
+      event.target.value = '';
+      return;
+    }
+
+    setError(null);
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      setLogoUrl(
+        typeof reader.result === 'string'
+          ? reader.result
+          : null,
+      );
+    };
+
+    reader.onerror = () => {
+      setError(
+        'No se pudo leer el archivo seleccionado.',
+      );
+      setLogoUrl(null);
+    };
+
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -3047,78 +3099,48 @@ function CreateTeamModal({
             disabled={submitting}
           />
         </div>
+
         <div>
-  <label
-    className="label"
-    htmlFor="team-logo"
-  >
-    Escudo del equipo
-  </label>
+          <label
+            className="label"
+            htmlFor="team-logo"
+          >
+            Escudo del equipo
+          </label>
 
-  <input
-    id="team-logo"
-    type="file"
-    accept="image/png,image/jpeg,image/webp,image/gif"
-    className="input"
-    disabled={submitting}
-    onChange={(event) => {
-      const file = event.target.files?.[0];
+          <input
+            id="team-logo"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="input"
+            disabled={submitting}
+            onChange={handleLogoChange}
+          />
 
-      if (!file) {
-        setLogoUrl(null);
-        return;
-      }
+          <p className="mt-1 text-xs text-neutral-400">
+            PNG, JPG, WEBP o GIF. Máximo 2 MB.
+          </p>
 
-      if (!file.type.startsWith('image/')) {
-        setError(
-          'El archivo seleccionado no es una imagen válida.',
-        );
-        return;
-      }
+          {logoUrl && (
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={logoUrl}
+                alt="Vista previa del escudo"
+                className="h-16 w-16 rounded-lg border border-neutral-200 object-cover"
+              />
 
-      if (file.size > 2 * 1024 * 1024) {
-        setError(
-          'El escudo no puede superar 2 MB.',
-        );
-        return;
-      }
-
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        setLogoUrl(
-          typeof reader.result === 'string'
-            ? reader.result
-            : null,
-        );
-      };
-
-      reader.readAsDataURL(file);
-    }}
-  />
-
-  <p className="mt-1 text-xs text-neutral-400">
-    PNG, JPG, WEBP o GIF. Máximo 2 MB.
-  </p>
-
-  {logoUrl && (
-    <div className="mt-3 flex items-center gap-3">
-      <img
-        src={logoUrl}
-        alt="Vista previa del escudo"
-        className="h-16 w-16 rounded-lg border border-neutral-200 object-cover"
-      />
-
-      <button
-        type="button"
-        onClick={() => setLogoUrl(null)}
-        className="text-sm text-red-600 hover:text-red-700"
-      >
-        Quitar escudo
-      </button>
-    </div>
-  )}
-</div>
+              <button
+                type="button"
+                onClick={() =>
+                  setLogoUrl(null)
+                }
+                className="text-sm text-red-600 hover:text-red-700"
+              >
+                Quitar escudo
+              </button>
+            </div>
+          )}
+        </div>
 
         <div>
           <label
