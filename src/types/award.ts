@@ -22,7 +22,7 @@ export interface AwardCandidate {
   assists: number;
   mvpAwards: number;
   performancePoints: number;
-  pointBreakdown?: { label: string; points: number }[];
+  pointBreakdown: { label: string; points: number }[];
   tournamentStage?: string;
   tournamentPosition?: number | null;
   rank: number;
