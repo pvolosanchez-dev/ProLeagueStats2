@@ -1,13 +1,25 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Trophy, Medal, Target, Award } from 'lucide-react';
-import { useAsync } from '@/hooks';
-import { awardServiceV2, leagueService } from '@/services';
+import { Trophy, Medal, Target, Award, UserPlus } from 'lucide-react';
+import { useAsync, useAuth } from '@/hooks';
+import {
+  awardServiceV2,
+  leagueService,
+  memberService,
+  playerService,
+  teamService,
+} from '@/services';
 import { LoadingState, ErrorState } from '@/components';
 
 export function AwardsPage() {
   const { leagueId } = useParams<{ leagueId: string }>();
+  const { user } = useAuth();
   const [section, setSection] = useState<'ballon' | 'boot' | 'puskas' | 'stats'>('ballon');
+  const [selectedPlayerId, setSelectedPlayerId] = useState('');
+  const [nominating, setNominating] = useState(false);
+  const [nominationMessage, setNominationMessage] = useState<string | null>(null);
+  const [nominationError, setNominationError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const { data: league, loading: leagueLoading, error: leagueError } = useAsync(
     () => leagueService.getLeagueById(leagueId!),
@@ -15,29 +27,114 @@ export function AwardsPage() {
   );
 
   const seasonId = league?.seasonId ?? null;
+
+  const { data: membership, loading: membershipLoading } = useAsync(
+    () => leagueId && user ? memberService.getMemberByUser(leagueId, user.id) : Promise.resolve(null),
+    [leagueId, user?.id],
+  );
+
+  const { data: teams, loading: teamsLoading } = useAsync(
+    () => leagueId ? teamService.getTeamsByLeague(leagueId) : Promise.resolve([]),
+    [leagueId],
+  );
+
+  const { data: players, loading: playersLoading } = useAsync(
+    () => leagueId && teams ? playerService.getPlayersByLeague(leagueId, teams) : Promise.resolve([]),
+    [leagueId, teams],
+  );
+
   const { data: ballon, loading: ballonLoading } = useAsync(
     () => seasonId && leagueId ? awardServiceV2.getBallonDorCandidates(leagueId, seasonId) : Promise.resolve([]),
     [leagueId, seasonId],
   );
+
   const { data: boot, loading: bootLoading } = useAsync(
     () => seasonId && leagueId ? awardServiceV2.getGoldenBootCandidates(leagueId, seasonId) : Promise.resolve([]),
     [leagueId, seasonId],
   );
+
   const { data: puskas, loading: puskasLoading } = useAsync(
     () => seasonId && leagueId ? awardServiceV2.getPuskasNominations(leagueId, seasonId) : Promise.resolve([]),
-    [leagueId, seasonId],
+    [leagueId, seasonId, refreshKey],
   );
+
   const { data: performance, loading: performanceLoading } = useAsync(
     () => seasonId && leagueId ? awardServiceV2.getAllPlayerPerformance(leagueId, seasonId) : Promise.resolve([]),
     [leagueId, seasonId],
   );
 
-  if (leagueLoading || ballonLoading || bootLoading || puskasLoading || performanceLoading) return <LoadingState />;
+  if (
+    leagueLoading ||
+    membershipLoading ||
+    teamsLoading ||
+    playersLoading ||
+    ballonLoading ||
+    bootLoading ||
+    puskasLoading ||
+    performanceLoading
+  ) {
+    return <LoadingState />;
+  }
+
   if (leagueError) return <ErrorState message={leagueError} />;
   if (!league) return <ErrorState message="Liga no encontrada" />;
   if (!seasonId) {
     return <div className="card p-8 text-center text-sm text-neutral-500">Esta liga todavía no tiene una temporada activa.</div>;
   }
+
+  const canNominatePuskas =
+    membership?.status === 'active' &&
+    (membership.role === 'owner' ||
+      membership.role === 'admin' ||
+      membership.role === 'captain');
+
+  const nominationsByPlayer = new Map<string, number>();
+  (puskas ?? []).forEach((nomination) => {
+    nominationsByPlayer.set(
+      nomination.playerId,
+      (nominationsByPlayer.get(nomination.playerId) ?? 0) + 1,
+    );
+  });
+
+  const availablePuskasPlayers = (players ?? [])
+    .filter((player) => (nominationsByPlayer.get(player.id) ?? 0) < 2)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const getTeamName = (teamId: string) =>
+    teams?.find((team) => team.id === teamId)?.name ?? 'Equipo desconocido';
+
+  const handleNominatePuskas = async () => {
+    if (!user || !leagueId || !seasonId || !selectedPlayerId) {
+      setNominationError('Selecciona un jugador para nominar.');
+      return;
+    }
+
+    try {
+      setNominating(true);
+      setNominationError(null);
+      setNominationMessage(null);
+
+      await awardServiceV2.nominatePuskas(
+        leagueId,
+        seasonId,
+        selectedPlayerId,
+        user.id,
+      );
+
+      setSelectedPlayerId('');
+      setNominationMessage('Jugador nominado al Puskás correctamente.');
+      setRefreshKey((key) => key + 1);
+    } catch (error) {
+      setNominationError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo registrar la nominación.',
+      );
+    } finally {
+      setNominating(false);
+    }
+  };
 
   const tabs = [
     { id: 'ballon' as const, label: 'Balón de Oro', icon: Trophy },
@@ -58,8 +155,14 @@ export function AwardsPage() {
           {tabs.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} type="button" onClick={() => setSection(item.id)} className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium ${section === item.id ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-700'}`}>
-                <Icon size={16} />{item.label}
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSection(item.id)}
+                className={`flex shrink-0 items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium ${section === item.id ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-700'}`}
+              >
+                <Icon size={16} />
+                {item.label}
               </button>
             );
           })}
@@ -89,9 +192,82 @@ export function AwardsPage() {
         )}
 
         {section === 'puskas' && (
-          <div className="p-4 sm:p-6">
-            <div className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4"><p className="font-semibold text-neutral-900">Nominados al Puskás</p><p className="mt-1 text-xs text-neutral-500">Los videos se registran en Discord. Aquí se muestra el jugador y su nominación.</p></div>
-            <div className="grid gap-3 sm:grid-cols-2">{puskas.map((nomination) => <div key={nomination.id} className="rounded-xl border border-neutral-200 p-4"><p className="font-semibold text-neutral-900">{nomination.playerName}</p><p className="mt-1 text-sm text-neutral-500">Nominado a Puskás · video en Discord</p>{nomination.isWinner && <p className="mt-3 text-sm font-semibold text-amber-700">🏆 Ganador del Puskás</p>}</div>)}</div>{puskas.length === 0 && <p className="py-8 text-center text-sm text-neutral-500">Todavía no hay nominaciones.</p>}
+          <div className="p-4 sm:p-6 space-y-5">
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+              <p className="font-semibold text-neutral-900">Nominados al Puskás</p>
+              <p className="mt-1 text-xs text-neutral-500">Los videos se registran en Discord. Cada jugador puede recibir un máximo de 2 nominaciones durante la temporada.</p>
+            </div>
+
+            {canNominatePuskas && (
+              <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-primary-700">
+                    <UserPlus size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-neutral-900">Nominar jugador</p>
+                    <p className="mt-1 text-xs text-neutral-600">Solo propietarios, administradores y capitanes pueden nominar.</p>
+
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <select
+                        className="input flex-1"
+                        value={selectedPlayerId}
+                        onChange={(event) => setSelectedPlayerId(event.target.value)}
+                        disabled={nominating || availablePuskasPlayers.length === 0}
+                      >
+                        <option value="">Selecciona un jugador</option>
+                        {availablePuskasPlayers.map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.name} · {getTeamName(player.teamId)} · {nominationsByPlayer.get(player.id) ?? 0}/2
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={handleNominatePuskas}
+                        disabled={nominating || !selectedPlayerId}
+                        className="btn-primary"
+                      >
+                        {nominating ? 'Nominando...' : 'Nominar a Puskás'}
+                      </button>
+                    </div>
+
+                    {availablePuskasPlayers.length === 0 && (
+                      <p className="mt-2 text-xs text-neutral-500">Todos los jugadores ya alcanzaron el máximo de 2 nominaciones o todavía no hay jugadores registrados.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {nominationMessage && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                {nominationMessage}
+              </div>
+            )}
+
+            {nominationError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                {nominationError}
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {puskas.map((nomination) => (
+                <div key={nomination.id} className="rounded-xl border border-neutral-200 p-4">
+                  <p className="font-semibold text-neutral-900">{nomination.playerName}</p>
+                  <p className="mt-1 text-sm text-neutral-500">{getTeamName(nomination.teamId)}</p>
+                  <p className="mt-1 text-xs text-neutral-400">Nominado a Puskás · video en Discord</p>
+                  <p className="mt-2 text-xs font-medium text-neutral-500">
+                    Nominaciones del jugador: {nominationsByPlayer.get(nomination.playerId) ?? 0}/2
+                  </p>
+                  {nomination.isWinner && <p className="mt-3 text-sm font-semibold text-amber-700">🏆 Ganador del Puskás</p>}
+                </div>
+              ))}
+            </div>
+
+            {puskas.length === 0 && <p className="py-8 text-center text-sm text-neutral-500">Todavía no hay nominaciones.</p>}
           </div>
         )}
 
