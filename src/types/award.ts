@@ -1,7 +1,11 @@
 export type AwardType =
   | 'ballon_or'
   | 'golden_boot'
-  | 'puskas';
+  | 'puskas'
+  | 'best_player'
+  | 'top_scorer'
+  | 'top_assister'
+  | 'best_goalkeeper';
 
 export type AwardVotingStatus =
   | 'not_started'
@@ -18,6 +22,7 @@ export interface AwardCandidate {
   assists: number;
   mvpAwards: number;
   performancePoints: number;
+  pointBreakdown?: { label: string; points: number }[];
   tournamentStage: string;
   tournamentPosition: number | null;
   rank: number;
@@ -70,15 +75,20 @@ export const AWARD_LABELS: Record<AwardType, string> = {
   ballon_or: 'Balón de Oro',
   golden_boot: 'Bota de Oro',
   puskas: 'Premio Puskás',
+  best_player: 'Mejor Jugador',
+  top_scorer: 'Mejor Goleador',
+  top_assister: 'Mejor Asistente',
+  best_goalkeeper: 'Mejor Portero',
 };
 
 export const AWARD_DESCRIPTIONS: Record<AwardType, string> = {
-  ballon_or:
-    'El Top 20 se determina por rendimiento. El ganador final se decide exclusivamente por votos.',
-  golden_boot:
-    'Se determina automáticamente por goles y asistencias.',
-  puskas:
-    'Premio al mejor gol de la temporada mediante nominaciones y votación.',
+  ballon_or: 'El Top 20 se determina por rendimiento. El ganador final se decide exclusivamente por votos.',
+  golden_boot: 'Se determina automáticamente por goles y asistencias.',
+  puskas: 'Premio al mejor gol de la temporada mediante nominaciones y votación.',
+  best_player: 'Premio histórico de compatibilidad.',
+  top_scorer: 'Premio histórico de compatibilidad.',
+  top_assister: 'Premio histórico de compatibilidad.',
+  best_goalkeeper: 'Premio histórico de compatibilidad.',
 };
 
 export const AWARD_POINT_VALUES = {
