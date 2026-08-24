@@ -4,7 +4,7 @@ import { ROLE_LABELS } from '@/utils/roles';
 interface AvatarProps {
   user: Pick<
     User,
-    'name' | 'avatarColor' | 'avatarUrl'
+    'name' | 'avatarColor' | 'avatarUrl' | 'profileGifUrl'
   >;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -26,6 +26,11 @@ export function Avatar({
     .join('')
     .toUpperCase();
 
+  const imageUrl =
+    user.profileGifUrl?.trim() ||
+    user.avatarUrl?.trim() ||
+    null;
+
   return (
     <div
       className={`${sizeClasses[size]} flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white shadow-sm`}
@@ -34,14 +39,13 @@ export function Avatar({
       }}
       title={user.name}
     >
-      {user.avatarUrl ? (
+      {imageUrl ? (
         <img
-          src={user.avatarUrl}
+          src={imageUrl}
           alt={user.name}
           className="h-full w-full object-cover"
           onError={(event) => {
-            event.currentTarget.style.display =
-              'none';
+            event.currentTarget.style.display = 'none';
           }}
         />
       ) : (
