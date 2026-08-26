@@ -1,87 +1,136 @@
 import { LeagueMember, Role } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
-import { seedMembers } from '@/data';
+import { supabase } from '@/lib/supabaseClient';
 
-function readMembers(): LeagueMember[] {
-  return storageService.getCollection<LeagueMember>(STORAGE_KEYS.members, seedMembers);
-}
-
-function writeMembers(members: LeagueMember[]): void {
-  storageService.setItem(STORAGE_KEYS.members, members);
+function mapMember(row: any): LeagueMember {
+  return {
+    id: row.id,
+    leagueId: row.league_id,
+    userId: row.user_id,
+    role: row.role,
+    teamId: row.team_id ?? null,
+    status: row.status,
+    joinedAt: row.joined_at,
+  };
 }
 
 async function getMembersByLeague(leagueId: string): Promise<LeagueMember[]> {
-  return readMembers().filter((m) => m.leagueId === leagueId);
+  const { data, error } = await supabase
+    .from('league_members')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('joined_at', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(mapMember);
 }
 
-async function getMemberByUser(leagueId: string, userId: string): Promise<LeagueMember | null> {
-  return readMembers().find((m) => m.leagueId === leagueId && m.userId === userId) ?? null;
+async function getMemberByUser(
+  leagueId: string,
+  userId: string,
+): Promise<LeagueMember | null> {
+  const { data, error } = await supabase
+    .from('league_members')
+    .select('*')
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? mapMember(data) : null;
 }
 
 async function getMembershipsByUser(userId: string): Promise<LeagueMember[]> {
-  return readMembers().filter((m) => m.userId === userId);
+  const { data, error } = await supabase
+    .from('league_members')
+    .select('*')
+    .eq('user_id', userId)
+    .order('joined_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapMember);
 }
 
-function createMember(leagueId: string, userId: string, role: Role, teamId: string | null = null): LeagueMember {
-  const members = readMembers();
-  const existing = members.find((m) => m.leagueId === leagueId && m.userId === userId);
+async function createMember(
+  leagueId: string,
+  userId: string,
+  role: Role,
+  teamId: string | null = null,
+): Promise<LeagueMember> {
+  const existing = await getMemberByUser(leagueId, userId);
   if (existing) return existing;
 
-  const member: LeagueMember = {
-    id: `member-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    leagueId,
-    userId,
-    role,
-    teamId,
-    status: 'active',
-    joinedAt: new Date().toISOString(),
-  };
-  writeMembers([...members, member]);
-  return member;
+  const id = `member-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const { data, error } = await supabase
+    .from('league_members')
+    .insert({
+      id,
+      league_id: leagueId,
+      user_id: userId,
+      role,
+      team_id: teamId,
+      status: 'active',
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapMember(data);
 }
 
-function updateMemberRole(leagueId: string, userId: string, role: Role): LeagueMember | null {
-  const members = readMembers();
-  let updated: LeagueMember | null = null;
-  const next = members.map((m) => {
-    if (m.leagueId === leagueId && m.userId === userId) {
-      updated = { ...m, role };
-      return updated;
-    }
-    return m;
-  });
-  writeMembers(next);
-  return updated;
+async function updateMemberRole(
+  leagueId: string,
+  userId: string,
+  role: Role,
+): Promise<LeagueMember | null> {
+  const { data, error } = await supabase
+    .from('league_members')
+    .update({ role })
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? mapMember(data) : null;
 }
 
-function updateMemberTeam(leagueId: string, userId: string, teamId: string | null): LeagueMember | null {
-  const members = readMembers();
-  let updated: LeagueMember | null = null;
-  const next = members.map((m) => {
-    if (m.leagueId === leagueId && m.userId === userId) {
-      updated = { ...m, teamId };
-      return updated;
-    }
-    return m;
-  });
-  writeMembers(next);
-  return updated;
+async function updateMemberTeam(
+  leagueId: string,
+  userId: string,
+  teamId: string | null,
+): Promise<LeagueMember | null> {
+  const { data, error } = await supabase
+    .from('league_members')
+    .update({ team_id: teamId })
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? mapMember(data) : null;
 }
 
-function expelMember(leagueId: string, userId: string): void {
-  const members = readMembers();
-  const next = members.map((m) => {
-    if (m.leagueId === leagueId && m.userId === userId && m.role !== 'owner') {
-      return { ...m, status: 'expelled' as const };
-    }
-    return m;
-  });
-  writeMembers(next);
+async function expelMember(leagueId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('league_members')
+    .update({ status: 'expelled' })
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .neq('role', 'owner');
+
+  if (error) throw error;
 }
 
-function removeMember(leagueId: string, userId: string): void {
-  writeMembers(readMembers().filter((m) => !(m.leagueId === leagueId && m.userId === userId)));
+async function removeMember(leagueId: string, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('league_members')
+    .delete()
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .neq('role', 'owner');
+
+  if (error) throw error;
 }
 
 export const memberService = {
