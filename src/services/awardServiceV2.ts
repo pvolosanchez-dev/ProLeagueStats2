@@ -16,6 +16,7 @@ import { playerService } from './playerService';
 import { teamService } from './teamService';
 import { memberService } from './memberService';
 import { matchService } from './matchService';
+import { playoffSeriesService } from './playoffSeriesService';
 
 const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -63,32 +64,85 @@ async function buildCandidates(leagueId: string, seasonId: string): Promise<Awar
   const players = await playerService.getPlayersByLeague(leagueId, teams);
   const matches = (await matchService.getMatchesByLeague(leagueId)).filter((m) => m.seasonId === seasonId);
   const teamMap = new Map(teams.map((t) => [t.id, t]));
-  return players.map((player) => {
+
+  const candidates = await Promise.all(players.map(async (player) => {
     const team = teamMap.get(player.teamId);
-    const playoff = matches.filter((m) => m.phase === 'playoff' && (m.homeTeamId === player.teamId || m.awayTeamId === player.teamId));
-    const stage = playoff.some((m) => m.playoffRound === 'final') ? 'Finalista'
-      : playoff.some((m) => m.playoffRound === 'semifinal') ? 'Semifinalista'
-      : playoff.some((m) => m.playoffRound === 'quarterfinal') ? 'Cuartofinalista' : 'Temporada regular';
-    const bonus = stage === 'Semifinalista' ? AWARD_POINT_VALUES.semifinalist : stage === 'Cuartofinalista' ? AWARD_POINT_VALUES.quarterfinalist : 0;
+    const playoff = matches.filter(
+      (m) => m.phase === 'playoff' && (m.homeTeamId === player.teamId || m.awayTeamId === player.teamId),
+    );
+
+    let stage = 'Temporada regular';
+    let bonus = 0;
+
+    if (playoff.some((m) => m.playoffRound === 'final')) {
+      stage = 'Finalista';
+      const seriesIds = [...new Set(
+        playoff
+          .filter((m) => m.playoffRound === 'final' && m.playoffSeriesId)
+          .map((m) => m.playoffSeriesId as string),
+      )];
+
+      for (const seriesId of seriesIds) {
+        const result = await playoffSeriesService.getSeriesResult(seriesId);
+        if (result.decided && result.winnerTeamId === player.teamId) {
+          stage = 'Campeón';
+          bonus = AWARD_POINT_VALUES.champion;
+          break;
+        }
+        if (result.decided && result.loserTeamId === player.teamId) {
+          stage = 'Subcampeón';
+          bonus = AWARD_POINT_VALUES.runnerUp;
+          break;
+        }
+      }
+    } else if (playoff.some((m) => m.playoffRound === 'semifinal')) {
+      stage = 'Semifinalista';
+      bonus = AWARD_POINT_VALUES.semifinalist;
+    } else if (playoff.some((m) => m.playoffRound === 'quarterfinal')) {
+      stage = 'Cuartofinalista';
+      bonus = AWARD_POINT_VALUES.quarterfinalist;
+    }
+
     return {
-      playerId: player.id, playerName: player.name, teamId: player.teamId, teamName: team?.name ?? '', teamColor: team?.color ?? '#64748b',
-      goals: player.stats.goals, assists: player.stats.assists, mvpAwards: player.stats.mvpAwards,
-      performancePoints: player.stats.goals * AWARD_POINT_VALUES.goal + player.stats.assists * AWARD_POINT_VALUES.assist + player.stats.mvpAwards * AWARD_POINT_VALUES.mvp + bonus,
-      tournamentStage: stage, rank: 0,
+      playerId: player.id,
+      playerName: player.name,
+      teamId: player.teamId,
+      teamName: team?.name ?? '',
+      teamColor: team?.color ?? '#64748b',
+      goals: player.stats.goals,
+      assists: player.stats.assists,
+      mvpAwards: player.stats.mvpAwards,
+      performancePoints:
+        player.stats.goals * AWARD_POINT_VALUES.goal +
+        player.stats.assists * AWARD_POINT_VALUES.assist +
+        player.stats.mvpAwards * AWARD_POINT_VALUES.mvp +
+        bonus,
+      tournamentStage: stage,
+      rank: 0,
     };
-  });
+  }));
+
+  return candidates;
 }
 
 async function getBallonDorCandidates(leagueId: string, seasonId: string) {
-  return (await buildCandidates(leagueId, seasonId)).sort((a, b) => b.performancePoints - a.performancePoints || b.goals - a.goals || b.assists - a.assists || b.mvpAwards - a.mvpAwards).slice(0, MAX_BALLON_CANDIDATES).map((c, i) => ({ ...c, rank: i + 1 }));
+  return (await buildCandidates(leagueId, seasonId))
+    .sort((a, b) => b.performancePoints - a.performancePoints || b.goals - a.goals || b.assists - a.assists || b.mvpAwards - a.mvpAwards)
+    .slice(0, MAX_BALLON_CANDIDATES)
+    .map((c, i) => ({ ...c, rank: i + 1 }));
 }
 
 async function getGoldenBootCandidates(leagueId: string, seasonId: string) {
-  return (await buildCandidates(leagueId, seasonId)).sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.performancePoints - a.performancePoints).slice(0, MAX_GOLDEN_BOOT_CANDIDATES).map((c, i) => ({ ...c, rank: i + 1 }));
+  return (await buildCandidates(leagueId, seasonId))
+    .sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.performancePoints - a.performancePoints)
+    .slice(0, MAX_GOLDEN_BOOT_CANDIDATES)
+    .map((c, i) => ({ ...c, rank: i + 1 }));
 }
 
 async function getAllPlayerPerformance(leagueId: string, seasonId: string) {
-  return (await buildCandidates(leagueId, seasonId)).sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.mvpAwards - a.mvpAwards || b.performancePoints - a.performancePoints).map((c, i) => ({ ...c, rank: i + 1 }));
+  return (await buildCandidates(leagueId, seasonId))
+    .sort((a, b) => b.goals - a.goals || b.assists - a.assists || b.mvpAwards - a.mvpAwards || b.performancePoints - a.performancePoints)
+    .map((c, i) => ({ ...c, rank: i + 1 }));
 }
 
 async function nominatePuskas(leagueId: string, seasonId: string, playerId: string, actorId: string) {
