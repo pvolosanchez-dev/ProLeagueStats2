@@ -4,96 +4,73 @@ import {
   PlayoffFormatConfig,
   Sport,
 } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
-import { seedLeagues } from '@/data';
+import { supabase } from '@/lib/supabaseClient';
 import { memberService } from './memberService';
 import { seasonService } from './seasonService';
 import { auditService } from './auditService';
 
-function readLeagues(): League[] {
-  const leagues =
-    storageService.getCollection<League>(
-      STORAGE_KEYS.leagues,
-      seedLeagues,
-    );
-
-  const migrated = leagues.map(
-    (league) => ({
-      ...league,
-      sport: 'Fútbol' as const,
-      playoffFormat:
-        league.playoffFormat ?? {
-          quarterfinal: 'single-match',
-          semifinal: 'single-match',
-          final: 'single-match',
-        },
-    }),
-  );
-
-  storageService.setItem(
-    STORAGE_KEYS.leagues,
-    migrated,
-  );
-
-  return migrated;
-}
-
-function writeLeagues(
-  leagues: League[],
-): void {
-  storageService.setItem(
-    STORAGE_KEYS.leagues,
-    leagues,
-  );
+function mapLeague(row: any): League {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? '',
+    sport: row.sport as Sport,
+    color: row.color,
+    logoUrl: row.logo_url ?? null,
+    isPublic: row.is_public,
+    inviteCode: row.invite_code,
+    format: row.format as LeagueFormat,
+    playoffFormat: row.playoff_format ?? {
+      quarterfinal: 'single-match',
+      semifinal: 'single-match',
+      final: 'single-match',
+    },
+    status: row.status,
+    ownerId: row.owner_id,
+    seasonId: row.season_id ?? null,
+    createdAt: row.created_at,
+  };
 }
 
 function generateInviteCode(): string {
-  const chars =
-    'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
-
-  for (let i = 0; i < 6; i++) {
-    code +=
-      chars[
-        Math.floor(
-          Math.random() *
-            chars.length,
-        )
-      ];
+  for (let i = 0; i < 6; i += 1) {
+    code += chars[Math.floor(Math.random() * chars.length)];
   }
-
   return code;
 }
 
-async function getLeagues(): Promise<
-  League[]
-> {
-  return readLeagues();
+async function getLeagues(): Promise<League[]> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapLeague);
 }
 
-async function getLeagueById(
-  id: string,
-): Promise<League | null> {
-  return (
-    readLeagues().find(
-      (league) =>
-        league.id === id,
-    ) ?? null
-  );
+async function getLeagueById(id: string): Promise<League | null> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? mapLeague(data) : null;
 }
 
-async function getLeagueByInviteCode(
-  code: string,
-): Promise<League | null> {
-  return (
-    readLeagues().find(
-      (league) =>
-        league.inviteCode.toUpperCase() ===
-        code.toUpperCase(),
-    ) ?? null
-  );
+async function getLeagueByInviteCode(code: string): Promise<League | null> {
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .eq('invite_code', code.trim().toUpperCase())
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? mapLeague(data) : null;
 }
 
 interface CreateLeagueInput {
@@ -109,221 +86,117 @@ interface CreateLeagueInput {
   ownerId: string;
 }
 
-async function createLeague(
-  input: CreateLeagueInput,
-): Promise<League> {
-  const leagues =
-    readLeagues();
+async function createLeague(input: CreateLeagueInput): Promise<League> {
+  const id = `league-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const inviteCode = input.inviteCode?.trim().toUpperCase() || generateInviteCode();
+  const playoffFormat = input.format === 'league-playoff'
+    ? input.playoffFormat
+    : {
+        quarterfinal: 'single-match' as const,
+        semifinal: 'single-match' as const,
+        final: 'single-match' as const,
+      };
 
-  const league: League = {
-    id: `league-${Date.now()}`,
-    name: input.name.trim(),
-    description:
-      input.description.trim(),
-    sport: 'Fútbol',
-    color: input.color,
-    logoUrl: input.logoUrl,
-    isPublic: input.isPublic,
-    inviteCode:
-      input.inviteCode?.trim() ||
-      generateInviteCode(),
-    format: input.format,
-    playoffFormat:
-      input.format ===
-      'league-playoff'
-        ? input.playoffFormat
-        : {
-            quarterfinal: 'single-match',
-            semifinal: 'single-match',
-            final: 'single-match',
-          },
-    status: 'active',
-    ownerId: input.ownerId,
-    seasonId: null,
-    createdAt:
-      new Date().toISOString(),
-  };
+  const { data, error } = await supabase
+    .from('leagues')
+    .insert({
+      id,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      sport: 'Fútbol',
+      color: input.color,
+      logo_url: input.logoUrl,
+      is_public: input.isPublic,
+      invite_code: inviteCode,
+      format: input.format,
+      playoff_format: playoffFormat,
+      status: 'active',
+      owner_id: input.ownerId,
+    })
+    .select()
+    .single();
 
-  writeLeagues([
-    ...leagues,
-    league,
-  ]);
+  if (error) throw error;
 
-  memberService.createMember(
-    league.id,
-    input.ownerId,
-    'owner',
-  );
+  await memberService.createMember(id, input.ownerId, 'owner', null);
 
-  const season =
-    seasonService.create(
-      league.id,
-      'Temporada 1',
-    );
+  const season = await seasonService.create(id, 'Temporada 1');
+  await seasonService.activate(season.id);
 
-  seasonService.activate(
-    season.id,
-  );
+  const { data: updatedRow, error: updateError } = await supabase
+    .from('leagues')
+    .update({ season_id: season.id })
+    .eq('id', id)
+    .select()
+    .single();
 
-  writeLeagues(
-    readLeagues().map(
-      (currentLeague) =>
-        currentLeague.id ===
-        league.id
-          ? {
-              ...currentLeague,
-              seasonId:
-                season.id,
-            }
-          : currentLeague,
-    ),
-  );
+  if (updateError) throw updateError;
 
   auditService.log(
-    league.id,
+    id,
     input.ownerId,
     'league_created',
-    `Liga "${league.name}" creada.`,
+    `Liga "${input.name.trim()}" creada.`,
   );
 
-  return {
-    ...league,
-    seasonId: season.id,
-  };
+  return mapLeague(updatedRow ?? data);
 }
 
-async function updateLeague(
-  id: string,
-  updates: Partial<League>,
-): Promise<League> {
-  const leagues =
-    readLeagues();
+async function updateLeague(id: string, updates: Partial<League>): Promise<League> {
+  const payload: Record<string, unknown> = {};
 
-  const league =
-    leagues.find(
-      (item) => item.id === id,
-    );
+  if (updates.name !== undefined) payload.name = updates.name.trim();
+  if (updates.description !== undefined) payload.description = updates.description.trim();
+  if (updates.color !== undefined) payload.color = updates.color;
+  if (updates.logoUrl !== undefined) payload.logo_url = updates.logoUrl;
+  if (updates.isPublic !== undefined) payload.is_public = updates.isPublic;
+  if (updates.inviteCode !== undefined) payload.invite_code = updates.inviteCode.trim().toUpperCase();
+  if (updates.format !== undefined) payload.format = updates.format;
+  if (updates.playoffFormat !== undefined) payload.playoff_format = updates.playoffFormat;
+  if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.seasonId !== undefined) payload.season_id = updates.seasonId;
 
-  if (!league) {
-    throw new Error(
-      'Liga no encontrada.',
-    );
-  }
+  const { data, error } = await supabase
+    .from('leagues')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single();
 
-  const updated: League = {
-    ...league,
-    ...updates,
-    id: league.id,
-    ownerId: league.ownerId,
-    sport: 'Fútbol',
-    playoffFormat:
-      updates.playoffFormat ??
-      league.playoffFormat ??
-      {
-        quarterfinal: 'single-match',
-        semifinal: 'single-match',
-        final: 'single-match',
-      },
-  };
-
-  writeLeagues(
-    leagues.map(
-      (item) =>
-        item.id === id
-          ? updated
-          : item,
-    ),
-  );
-
-  return updated;
+  if (error) throw error;
+  return mapLeague(data);
 }
 
-async function togglePause(
-  id: string,
-  actorId: string,
-): Promise<League> {
-  const leagues =
-    readLeagues();
+async function togglePause(id: string, actorId: string): Promise<League> {
+  const league = await getLeagueById(id);
+  if (!league) throw new Error('Liga no encontrada.');
 
-  const league =
-    leagues.find(
-      (item) => item.id === id,
-    );
-
-  if (!league) {
-    throw new Error(
-      'Liga no encontrada.',
-    );
-  }
-
-  const newStatus =
-    league.status ===
-    'active'
-      ? 'paused'
-      : 'active';
-
-  const updated = {
-    ...league,
-    status: newStatus,
-  };
-
-  writeLeagues(
-    leagues.map(
-      (item) =>
-        item.id === id
-          ? updated
-          : item,
-    ),
-  );
+  const newStatus = league.status === 'active' ? 'paused' : 'active';
+  const updated = await updateLeague(id, { status: newStatus });
 
   auditService.log(
     id,
     actorId,
-    newStatus === 'paused'
-      ? 'league_paused'
-      : 'league_resumed',
-    `Liga ${
-      newStatus === 'paused'
-        ? 'pausada'
-        : 'reanudada'
-    }.`,
+    newStatus === 'paused' ? 'league_paused' : 'league_resumed',
+    `Liga ${newStatus === 'paused' ? 'pausada' : 'reanudada'}.`,
   );
 
   return updated;
 }
 
-async function deleteLeague(
-  id: string,
-  actorId: string,
-): Promise<void> {
-  const leagues =
-    readLeagues();
-
-  const league =
-    leagues.find(
-      (item) => item.id === id,
-    );
-
-  if (!league) {
-    throw new Error(
-      'Liga no encontrada.',
-    );
+async function deleteLeague(id: string, actorId: string): Promise<void> {
+  const league = await getLeagueById(id);
+  if (!league) throw new Error('Liga no encontrada.');
+  if (league.ownerId !== actorId) {
+    throw new Error('Solo el propietario puede eliminar esta liga.');
   }
 
-  if (
-    league.ownerId !== actorId
-  ) {
-    throw new Error(
-      'Solo el propietario puede eliminar esta liga.',
-    );
-  }
+  const { error } = await supabase
+    .from('leagues')
+    .delete()
+    .eq('id', id);
 
-  writeLeagues(
-    leagues.filter(
-      (item) =>
-        item.id !== id,
-    ),
-  );
+  if (error) throw error;
 
   auditService.log(
     id,
@@ -333,26 +206,19 @@ async function deleteLeague(
   );
 }
 
-async function getLeaguesByUser(
-  userId: string,
-): Promise<League[]> {
-  const memberships =
-    await memberService.getMembershipsByUser(
-      userId,
-    );
+async function getLeaguesByUser(userId: string): Promise<League[]> {
+  const memberships = await memberService.getMembershipsByUser(userId);
+  if (memberships.length === 0) return [];
 
-  const leagueIds =
-    memberships.map(
-      (membership) =>
-        membership.leagueId,
-    );
+  const leagueIds = memberships.map((membership) => membership.leagueId);
+  const { data, error } = await supabase
+    .from('leagues')
+    .select('*')
+    .in('id', leagueIds)
+    .order('created_at', { ascending: false });
 
-  return readLeagues().filter(
-    (league) =>
-      leagueIds.includes(
-        league.id,
-      ),
-  );
+  if (error) throw error;
+  return (data ?? []).map(mapLeague);
 }
 
 export const leagueService = {
