@@ -4,6 +4,7 @@ import {
   User,
 } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
+import { imageService } from './imageService';
 
 type ProfileRow = {
   id: string;
@@ -215,7 +216,14 @@ async function updateProfile(
   }
 
   if (updates.avatarUrl !== undefined) {
-    payload.avatar_url = updates.avatarUrl;
+    payload.avatar_url = updates.avatarUrl
+      ? await imageService.uploadDataUrl(
+          updates.avatarUrl,
+          'avatars',
+          `${userId}/avatar`,
+          'avatar',
+        )
+      : null;
   }
 
   if (updates.avatarColor !== undefined) {
@@ -223,7 +231,14 @@ async function updateProfile(
   }
 
   if (updates.profileGifUrl !== undefined) {
-    payload.profile_gif_url = updates.profileGifUrl;
+    payload.profile_gif_url = updates.profileGifUrl
+      ? await imageService.uploadDataUrl(
+          updates.profileGifUrl,
+          'avatars',
+          `${userId}/gif`,
+          'profile-gif',
+        )
+      : null;
   }
 
   const { data, error } = await supabase
