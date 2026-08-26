@@ -1,4 +1,3 @@
-export { storageService } from './storageService';
 export { STORAGE_KEYS } from './storageKeys';
 export { authService } from './authService';
 export { leagueService } from './leagueService';
