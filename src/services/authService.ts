@@ -1,116 +1,82 @@
 import {
   LoginCredentials,
   RegisterData,
-  Session,
-  StoredUser,
   User,
 } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
-import { seedUsers } from '@/data';
+import { supabase } from '@/lib/supabaseClient';
 
-const SESSION_KEY =
-  'proleaguestats:session';
+type ProfileRow = {
+  id: string;
+  name: string;
+  username: string;
+  email: string | null;
+  bio: string | null;
+  avatar_color: string;
+  avatar_url: string | null;
+  profile_gif_url: string | null;
+  created_at: string;
+};
 
-function getSession(): Session | null {
-  try {
-    const raw =
-      sessionStorage.getItem(
-        SESSION_KEY,
-      );
+function mapProfile(profile: ProfileRow): User {
+  return {
+    id: profile.id,
+    name: profile.name,
+    username: profile.username,
+    email: profile.email ?? '',
+    bio: profile.bio ?? '',
+    avatarColor: profile.avatar_color,
+    avatarUrl: profile.avatar_url,
+    profileGifUrl: profile.profile_gif_url,
+    createdAt: profile.created_at,
+  };
+}
 
-    return raw
-      ? (JSON.parse(raw) as Session)
-      : null;
-  } catch {
-    return null;
+async function getProfileById(id: string): Promise<User | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
   }
-}
 
-function setSession(
-  session: Session,
-): void {
-  sessionStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify(session),
-  );
-}
-
-function clearSession(): void {
-  sessionStorage.removeItem(
-    SESSION_KEY,
-  );
-}
-
-function readUsers(): StoredUser[] {
-  return storageService.getCollection<StoredUser>(
-    STORAGE_KEYS.users,
-    seedUsers,
-  );
-}
-
-function writeUsers(
-  users: StoredUser[],
-): void {
-  storageService.setItem(
-    STORAGE_KEYS.users,
-    users,
-  );
-}
-
-function toPublicUser(
-  user: StoredUser,
-): User {
-  const {
-    password,
-    ...publicUser
-  } = user;
-
-  return publicUser;
+  return data ? mapProfile(data as ProfileRow) : null;
 }
 
 async function getCurrentUser(): Promise<User | null> {
-  const session = getSession();
+  const { data, error } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (error || !data.user) {
     return null;
   }
 
-  const user = readUsers().find(
-    (candidate) =>
-      candidate.id === session.userId,
-  );
-
-  return user
-    ? toPublicUser(user)
-    : null;
+  return getProfileById(data.user.id);
 }
 
 async function login({
   email,
   password,
 }: LoginCredentials): Promise<User> {
-  const user = readUsers().find(
-    (candidate) =>
-      candidate.email
-        .toLowerCase() ===
-        email.trim().toLowerCase(),
-  );
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
 
-  if (
-    !user ||
-    user.password !== password
-  ) {
+  if (error || !data.user) {
     throw new Error(
-      'Correo o contraseña incorrectos.',
+      error?.message ?? 'Correo o contraseña incorrectos.',
     );
   }
 
-  setSession({
-    userId: user.id,
-  });
+  const profile = await getProfileById(data.user.id);
 
-  return toPublicUser(user);
+  if (!profile) {
+    throw new Error('La cuenta no tiene un perfil configurado.');
+  }
+
+  return profile;
 }
 
 async function register({
@@ -118,107 +84,71 @@ async function register({
   email,
   password,
 }: RegisterData): Promise<User> {
-  const users = readUsers();
-
-  const normalizedEmail =
-    email.trim().toLowerCase();
-
-  if (
-    users.some(
-      (candidate) =>
-        candidate.email.toLowerCase() ===
-        normalizedEmail,
-    )
-  ) {
-    throw new Error(
-      'Ya existe una cuenta registrada con ese correo.',
-    );
-  }
-
-  const cleanName =
-    name.trim();
+  const cleanName = name.trim();
+  const normalizedEmail = email.trim().toLowerCase();
 
   if (!cleanName) {
-    throw new Error(
-      'Debes indicar tu nombre.',
-    );
+    throw new Error('Debes indicar tu nombre.');
   }
 
-  /*
-   * Generar username automáticamente
-   * a partir del nombre.
-   */
+  if (cleanName.length > 40) {
+    throw new Error('El nombre no puede superar 40 caracteres.');
+  }
+
   const baseUsername =
     cleanName
       .toLowerCase()
       .normalize('NFD')
-      .replace(
-        /[\u0300-\u036f]/g,
-        '',
-      )
-      .replace(
-        /[^a-z0-9_]/g,
-        '',
-      )
-      .slice(0, 16) ||
-    'usuario';
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9_]/g, '')
+      .slice(0, 16) || 'usuario';
 
-  let username =
-    baseUsername;
-
-  let counter = 1;
-
-  while (
-    users.some(
-      (candidate) =>
-        candidate.username ===
-        username,
-    )
-  ) {
-    username =
-      `${baseUsername}${counter}`;
-
-    counter++;
-  }
-
-  const newUser: StoredUser = {
-    id: `user-${Date.now()}`,
-    name: cleanName,
-    username,
+  const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
-    avatarColor: '#0ea5e9',
-    avatarUrl: null,
-    profileGifUrl: null,
-    createdAt:
-      new Date().toISOString(),
-  };
-
-  writeUsers([
-    ...users,
-    newUser,
-  ]);
-
-  setSession({
-    userId: newUser.id,
+    options: {
+      data: {
+        name: cleanName,
+        username: baseUsername,
+      },
+    },
   });
 
-  return toPublicUser(
-    newUser,
-  );
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data.user) {
+    throw new Error('No se pudo crear la cuenta.');
+  }
+
+  if (!data.session) {
+    throw new Error(
+      'Cuenta creada. Revisa tu correo para confirmar la cuenta antes de iniciar sesión.',
+    );
+  }
+
+  const profile = await getProfileById(data.user.id);
+
+  if (!profile) {
+    throw new Error('La cuenta se creó pero no se pudo crear el perfil.');
+  }
+
+  return profile;
 }
 
 async function logout(): Promise<void> {
-  clearSession();
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
-async function loginAsDemo(
-  email: string,
-): Promise<User> {
-  return login({
-    email,
-    password: 'demo1234',
-  });
+async function loginAsDemo(_email: string): Promise<User> {
+  throw new Error(
+    'Las cuentas de demostración todavía no están migradas a Supabase.',
+  );
 }
 
 async function updateProfile(
@@ -226,181 +156,104 @@ async function updateProfile(
   updates: Partial<
     Pick<
       User,
-      | 'name'
-      | 'username'
-      | 'avatarUrl'
-      | 'avatarColor'
-      | 'profileGifUrl'
+      'name' | 'username' | 'avatarUrl' | 'avatarColor' | 'profileGifUrl'
     >
   >,
 ): Promise<User> {
-  const users = readUsers();
+  const payload: Record<string, string | null> = {};
 
-  const user = users.find(
-    (candidate) =>
-      candidate.id === userId,
-  );
-
-  if (!user) {
-    throw new Error(
-      'Usuario no encontrado.',
-    );
-  }
-
-  /*
-   * Validar nombre.
-   */
-  if (
-    updates.name !== undefined
-  ) {
-    const name =
-      updates.name.trim();
+  if (updates.name !== undefined) {
+    const name = updates.name.trim();
 
     if (!name) {
-      throw new Error(
-        'El nombre no puede estar vacío.',
-      );
+      throw new Error('El nombre no puede estar vacío.');
     }
 
     if (name.length > 40) {
-      throw new Error(
-        'El nombre no puede superar 40 caracteres.',
-      );
+      throw new Error('El nombre no puede superar 40 caracteres.');
     }
 
-    updates = {
-      ...updates,
-      name,
-    };
+    payload.name = name;
   }
 
-  /*
-   * Validar username.
-   */
-  if (
-    updates.username !==
-    undefined
-  ) {
-    const username =
-      updates.username
-        .trim()
-        .toLowerCase();
+  if (updates.username !== undefined) {
+    const username = updates.username.trim().toLowerCase();
 
-    if (
-      username.length < 3
-    ) {
-      throw new Error(
-        'El nombre de usuario debe tener al menos 3 caracteres.',
-      );
+    if (username.length < 3 || username.length > 20) {
+      throw new Error('El nombre de usuario debe tener entre 3 y 20 caracteres.');
     }
 
-    if (
-      username.length > 20
-    ) {
-      throw new Error(
-        'El nombre de usuario no puede superar 20 caracteres.',
-      );
-    }
-
-    if (
-      !/^[a-z0-9_]+$/.test(
-        username,
-      )
-    ) {
+    if (!/^[a-z0-9_]+$/.test(username)) {
       throw new Error(
         'El nombre de usuario solo puede contener letras, números y guiones bajos.',
       );
     }
 
-    const usernameTaken =
-      users.some(
-        (candidate) =>
-          candidate.id !== userId &&
-          candidate.username ===
-            username,
-      );
+    const { data: existing, error: existingError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', username)
+      .neq('id', userId)
+      .maybeSingle();
 
-    if (usernameTaken) {
-      throw new Error(
-        'Ese nombre de usuario ya está ocupado.',
-      );
+    if (existingError) {
+      throw new Error(existingError.message);
     }
 
-    updates = {
-      ...updates,
-      username,
-    };
-  }
-
-  /*
-   * Limitar la bio si posteriormente
-   * se agrega al modelo.
-   */
-  if (
-    'bio' in updates &&
-    typeof (
-      updates as Record<
-        string,
-        unknown
-      >
-    ).bio === 'string'
-  ) {
-    const bio = (
-      updates as Record<
-        string,
-        unknown
-      >
-    ).bio as string;
-
-    if (bio.length > 160) {
-      throw new Error(
-        'La biografía no puede superar 160 caracteres.',
-      );
+    if (existing) {
+      throw new Error('Ese nombre de usuario ya está ocupado.');
     }
+
+    payload.username = username;
   }
 
-  const updated: StoredUser = {
-    ...user,
-    ...updates,
-  };
+  if (updates.avatarUrl !== undefined) {
+    payload.avatar_url = updates.avatarUrl;
+  }
 
-  writeUsers(
-    users.map(
-      (candidate) =>
-        candidate.id === userId
-          ? updated
-          : candidate,
-    ),
-  );
+  if (updates.avatarColor !== undefined) {
+    payload.avatar_color = updates.avatarColor;
+  }
 
-  return toPublicUser(
-    updated,
-  );
+  if (updates.profileGifUrl !== undefined) {
+    payload.profile_gif_url = updates.profileGifUrl;
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(payload)
+    .eq('id', userId)
+    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? 'No se pudo actualizar el perfil.');
+  }
+
+  return mapProfile(data as ProfileRow);
 }
 
-async function getUserById(
-  id: string,
-): Promise<User | null> {
-  const user = readUsers().find(
-    (candidate) =>
-      candidate.id === id,
-  );
-
-  return user
-    ? toPublicUser(user)
-    : null;
+async function getUserById(id: string): Promise<User | null> {
+  return getProfileById(id);
 }
 
-async function getUsersByIds(
-  ids: string[],
-): Promise<User[]> {
-  const users = readUsers();
+async function getUsersByIds(ids: string[]): Promise<User[]> {
+  if (ids.length === 0) {
+    return [];
+  }
 
-  return users
-    .filter((user) =>
-      ids.includes(user.id),
-    )
-    .map(toPublicUser);
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .in('id', ids);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((profile) =>
+    mapProfile(profile as ProfileRow),
+  );
 }
 
 export const authService = {
