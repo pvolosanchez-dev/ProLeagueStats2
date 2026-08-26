@@ -1,50 +1,83 @@
 import { Notification, NotificationType } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
+import { supabase } from '@/lib/supabaseClient';
 
-function readNotifications(): Notification[] {
-  return storageService.getCollection<Notification>(STORAGE_KEYS.notifications, []);
+function mapNotification(row: any): Notification {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    type: row.type as NotificationType,
+    title: row.title,
+    message: row.message,
+    read: row.read,
+    createdAt: row.created_at,
+  };
 }
 
-function writeNotifications(notifications: Notification[]): void {
-  storageService.setItem(STORAGE_KEYS.notifications, notifications);
-}
-
-function create(
+async function create(
   userId: string,
   type: NotificationType,
   title: string,
   message: string,
-): Notification {
-  const notification: Notification = {
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    userId,
-    type,
-    title,
-    message,
-    read: false,
-    createdAt: new Date().toISOString(),
-  };
-  writeNotifications([...readNotifications(), notification]);
-  return notification;
+): Promise<Notification> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .insert({
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      user_id: userId,
+      type,
+      title,
+      message,
+      read: false,
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? 'No se pudo crear la notificación.');
+  }
+
+  return mapNotification(data);
 }
 
 async function getByUser(userId: string): Promise<Notification[]> {
-  return readNotifications()
-    .filter((n) => n.userId === userId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapNotification);
 }
 
 async function getUnreadCount(userId: string): Promise<number> {
-  return readNotifications().filter((n) => n.userId === userId && !n.read).length;
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
-function markAsRead(id: string): void {
-  writeNotifications(readNotifications().map((n) => (n.id === id ? { ...n, read: true } : n)));
+async function markAsRead(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
 }
 
-function markAllAsRead(userId: string): void {
-  writeNotifications(readNotifications().map((n) => (n.userId === userId ? { ...n, read: true } : n)));
+async function markAllAsRead(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) throw new Error(error.message);
 }
 
 export const notificationService = {
