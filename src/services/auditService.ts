@@ -1,31 +1,43 @@
 import { AuditLog } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
+import { supabase } from '@/lib/supabaseClient';
 
-function readLogs(): AuditLog[] {
-  return storageService.getCollection<AuditLog>(STORAGE_KEYS.auditLogs, []);
+function mapAudit(row: any): AuditLog {
+  return {
+    id: row.id,
+    leagueId: row.league_id,
+    actorId: row.actor_id,
+    action: row.action,
+    details: row.details,
+    createdAt: row.created_at,
+  };
 }
 
-function writeLogs(logs: AuditLog[]): void {
-  storageService.setItem(STORAGE_KEYS.auditLogs, logs);
-}
-
-function log(leagueId: string, actorId: string, action: string, details: string): void {
-  const entry: AuditLog = {
+async function log(
+  leagueId: string,
+  actorId: string,
+  action: string,
+  details: string,
+): Promise<void> {
+  const { error } = await supabase.from('audit_logs').insert({
     id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    leagueId,
-    actorId,
+    league_id: leagueId,
+    actor_id: actorId,
     action,
     details,
-    createdAt: new Date().toISOString(),
-  };
-  writeLogs([...readLogs(), entry]);
+  });
+
+  if (error) throw new Error(error.message);
 }
 
 async function getByLeague(leagueId: string): Promise<AuditLog[]> {
-  return readLogs()
-    .filter((l) => l.leagueId === leagueId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapAudit);
 }
 
 export const auditService = {
