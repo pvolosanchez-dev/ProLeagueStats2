@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { User } from '@/types';
 import { authService } from '@/services';
+import { supabase } from '@/lib/supabaseClient';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -8,14 +9,36 @@ export function useAuth() {
 
   useEffect(() => {
     let active = true;
-    authService.getCurrentUser().then((currentUser) => {
+
+    void authService.getCurrentUser().then((currentUser) => {
       if (active) {
         setUser(currentUser);
         setLoading(false);
       }
     });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      void authService.getCurrentUser().then((currentUser) => {
+        if (active) {
+          setUser(currentUser);
+          setLoading(false);
+        }
+      });
+    });
+
     return () => {
       active = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -42,12 +65,27 @@ export function useAuth() {
     return demoUser;
   }, []);
 
-  const updateProfile = useCallback(async (updates: Partial<Pick<User, 'name' | 'avatarUrl' | 'avatarColor'>>) => {
-    if (!user) return;
-    const updated = await authService.updateProfile(user.id, updates);
-    setUser(updated);
-    return updated;
-  }, [user]);
+  const updateProfile = useCallback(
+    async (
+      updates: Partial<
+        Pick<User, 'name' | 'username' | 'avatarUrl' | 'avatarColor' | 'profileGifUrl'>
+      >,
+    ) => {
+      if (!user) return;
+      const updated = await authService.updateProfile(user.id, updates);
+      setUser(updated);
+      return updated;
+    },
+    [user],
+  );
 
-  return { user, loading, login, register, logout, loginAsDemo, updateProfile };
+  return {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    loginAsDemo,
+    updateProfile,
+  };
 }
