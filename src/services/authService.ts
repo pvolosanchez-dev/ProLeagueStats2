@@ -34,7 +34,9 @@ function mapProfile(profile: ProfileRow): User {
 async function getProfileById(id: string): Promise<User | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .select(
+      'id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at',
+    )
     .eq('id', id)
     .maybeSingle();
 
@@ -107,6 +109,7 @@ async function register({
     email: normalizedEmail,
     password,
     options: {
+      emailRedirectTo: `${window.location.origin}/dashboard`,
       data: {
         name: cleanName,
         username: baseUsername,
@@ -131,7 +134,9 @@ async function register({
   const profile = await getProfileById(data.user.id);
 
   if (!profile) {
-    throw new Error('La cuenta se creó pero no se pudo crear el perfil.');
+    throw new Error(
+      'La cuenta se creó pero no se pudo crear el perfil.',
+    );
   }
 
   return profile;
@@ -180,7 +185,9 @@ async function updateProfile(
     const username = updates.username.trim().toLowerCase();
 
     if (username.length < 3 || username.length > 20) {
-      throw new Error('El nombre de usuario debe tener entre 3 y 20 caracteres.');
+      throw new Error(
+        'El nombre de usuario debe tener entre 3 y 20 caracteres.',
+      );
     }
 
     if (!/^[a-z0-9_]+$/.test(username)) {
@@ -223,11 +230,15 @@ async function updateProfile(
     .from('profiles')
     .update(payload)
     .eq('id', userId)
-    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .select(
+      'id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at',
+    )
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? 'No se pudo actualizar el perfil.');
+    throw new Error(
+      error?.message ?? 'No se pudo actualizar el perfil.',
+    );
   }
 
   return mapProfile(data as ProfileRow);
@@ -244,7 +255,9 @@ async function getUsersByIds(ids: string[]): Promise<User[]> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at')
+    .select(
+      'id,name,username,email,bio,avatar_color,avatar_url,profile_gif_url,created_at',
+    )
     .in('id', ids);
 
   if (error) {
