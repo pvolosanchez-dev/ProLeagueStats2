@@ -2,6 +2,7 @@ import { Team } from '@/types';
 import { supabase } from '@/lib/supabaseClient';
 import { leagueService } from './leagueService';
 import { memberService } from './memberService';
+import { imageService } from './imageService';
 
 function mapTeam(row: any): Team {
   return {
@@ -90,6 +91,25 @@ async function createTeam(input: CreateTeamInput, actorId: string): Promise<Team
   }
 
   const id = `team-${Date.now()}`;
+
+  const logoUrl = input.logoUrl
+    ? await imageService.uploadDataUrl(
+        input.logoUrl,
+        'team-logos',
+        id,
+        'logo',
+      )
+    : null;
+
+  const bannerUrl = input.bannerUrl
+    ? await imageService.uploadDataUrl(
+        input.bannerUrl,
+        'team-logos',
+        `${id}/banner`,
+        'banner',
+      )
+    : null;
+
   const { data, error } = await supabase
     .from('teams')
     .insert({
@@ -99,10 +119,10 @@ async function createTeam(input: CreateTeamInput, actorId: string): Promise<Team
       short_name: input.shortName.trim().slice(0, 4).toUpperCase(),
       city: input.city.trim(),
       color: input.color,
-      logo_url: input.logoUrl,
+      logo_url: logoUrl,
       description: input.description.trim(),
       captain_id: null,
-      banner_url: input.bannerUrl ?? null,
+      banner_url: bannerUrl,
     })
     .select()
     .single();
@@ -134,9 +154,29 @@ async function updateTeam(id: string, updates: Partial<Team>, actorId: string): 
         short_name: updates.shortName?.slice(0, 4).toUpperCase(),
         city: updates.city,
         color: updates.color,
-        logo_url: updates.logoUrl,
+        logo_url:
+          updates.logoUrl !== undefined
+            ? updates.logoUrl
+              ? await imageService.uploadDataUrl(
+                  updates.logoUrl,
+                  'team-logos',
+                  id,
+                  'logo',
+                )
+              : null
+            : team.logoUrl,
         description: updates.description,
-        banner_url: updates.bannerUrl,
+        banner_url:
+          updates.bannerUrl !== undefined
+            ? updates.bannerUrl
+              ? await imageService.uploadDataUrl(
+                  updates.bannerUrl,
+                  'team-logos',
+                  `${id}/banner`,
+                  'banner',
+                )
+              : null
+            : team.bannerUrl,
       };
 
   const { data, error } = await supabase
