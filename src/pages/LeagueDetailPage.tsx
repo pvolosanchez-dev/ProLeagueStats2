@@ -228,6 +228,12 @@ export function LeagueDetailPage() {
       (request) =>
         request.status === 'pending',
     ) ?? [];
+    const myPendingLeagueRequest =
+  leagueRequests?.some(
+    (request) =>
+      request.userId === user?.id &&
+      request.status === 'pending',
+  ) ?? false;
 
   /*
    * ==========================================
@@ -801,20 +807,26 @@ export function LeagueDetailPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {!membership &&
-                  user &&
-                  league.status !==
-                    'paused' && (
-                    <button
-                      type="button"
-                      onClick={
-                        handleJoinLeague
-                      }
-                      className="btn-primary"
-                    >
-                      Unirse a la liga
-                    </button>
-                  )}
+               {!membership &&
+  user &&
+  league.status !== 'paused' &&
+  (myPendingLeagueRequest ? (
+    <button
+      type="button"
+      disabled
+      className="btn-secondary cursor-not-allowed opacity-70"
+    >
+      Solicitud pendiente
+    </button>
+  ) : (
+    <button
+      type="button"
+      onClick={handleJoinLeague}
+      className="btn-primary"
+    >
+      Unirse a la liga
+    </button>
+  ))}
 
                 {currentRole && (
                   <div
