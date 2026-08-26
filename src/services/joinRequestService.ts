@@ -1,23 +1,31 @@
 import { LeagueJoinRequest, TeamJoinRequest, RequestStatus } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
+import { supabase } from '@/lib/supabaseClient';
 import { leagueService } from './leagueService';
 import { teamService } from './teamService';
 
-function readLeagueRequests(): LeagueJoinRequest[] {
-  return storageService.getCollection<LeagueJoinRequest>(STORAGE_KEYS.leagueRequests, []);
+function mapLeagueRequest(row: any): LeagueJoinRequest {
+  return {
+    id: row.id,
+    leagueId: row.league_id,
+    userId: row.user_id,
+    status: row.status as RequestStatus,
+    message: row.message ?? '',
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+  };
 }
 
-function writeLeagueRequests(requests: LeagueJoinRequest[]): void {
-  storageService.setItem(STORAGE_KEYS.leagueRequests, requests);
-}
-
-function readTeamRequests(): TeamJoinRequest[] {
-  return storageService.getCollection<TeamJoinRequest>(STORAGE_KEYS.teamRequests, []);
-}
-
-function writeTeamRequests(requests: TeamJoinRequest[]): void {
-  storageService.setItem(STORAGE_KEYS.teamRequests, requests);
+function mapTeamRequest(row: any): TeamJoinRequest {
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    leagueId: row.league_id,
+    userId: row.user_id,
+    status: row.status as RequestStatus,
+    message: row.message ?? '',
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at,
+  };
 }
 
 async function createLeagueRequest(
@@ -27,63 +35,83 @@ async function createLeagueRequest(
 ): Promise<LeagueJoinRequest> {
   const league = await leagueService.getLeagueById(leagueId);
 
-  if (!league) {
-    throw new Error('Liga no encontrada.');
-  }
-
+  if (!league) throw new Error('Liga no encontrada.');
   if (league.status === 'paused') {
-    throw new Error(
-      'La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.',
-    );
+    throw new Error('La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.');
   }
 
-  const requests = readLeagueRequests();
-  const existing = requests.find(
-    (r) => r.leagueId === leagueId && r.userId === userId && r.status === 'pending',
-  );
+  const { data: existing, error: existingError } = await supabase
+    .from('league_join_requests')
+    .select('id')
+    .eq('league_id', leagueId)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  if (existingError) throw new Error(existingError.message);
   if (existing) throw new Error('Ya tienes una solicitud pendiente para esta liga.');
 
-  const request: LeagueJoinRequest = {
-    id: `lr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    leagueId,
-    userId,
-    status: 'pending',
-    message,
-    createdAt: new Date().toISOString(),
-    resolvedAt: null,
-  };
-  writeLeagueRequests([...requests, request]);
-  return request;
+  const { data, error } = await supabase
+    .from('league_join_requests')
+    .insert({
+      id: `lr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      league_id: leagueId,
+      user_id: userId,
+      status: 'pending',
+      message,
+      resolved_at: null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la solicitud.');
+  return mapLeagueRequest(data);
 }
 
 async function getLeagueRequestsByLeague(leagueId: string): Promise<LeagueJoinRequest[]> {
-  return readLeagueRequests()
-    .filter((r) => r.leagueId === leagueId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('league_join_requests')
+    .select('*')
+    .eq('league_id', leagueId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapLeagueRequest);
 }
 
 async function getLeagueRequestsByUser(userId: string): Promise<LeagueJoinRequest[]> {
-  return readLeagueRequests()
-    .filter((r) => r.userId === userId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('league_join_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapLeagueRequest);
 }
 
-function resolveLeagueRequest(requestId: string, status: RequestStatus): LeagueJoinRequest | null {
-  const requests = readLeagueRequests();
-  let resolved: LeagueJoinRequest | null = null;
-  const next = requests.map((r) => {
-    if (r.id === requestId) {
-      resolved = { ...r, status, resolvedAt: new Date().toISOString() };
-      return resolved;
-    }
-    return r;
-  });
-  writeLeagueRequests(next);
-  return resolved;
+async function resolveLeagueRequest(
+  requestId: string,
+  status: RequestStatus,
+): Promise<LeagueJoinRequest | null> {
+  const { data, error } = await supabase
+    .from('league_join_requests')
+    .update({ status, resolved_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? mapLeagueRequest(data) : null;
 }
 
-function cancelLeagueRequest(requestId: string): void {
-  writeLeagueRequests(readLeagueRequests().filter((r) => r.id !== requestId));
+async function cancelLeagueRequest(requestId: string): Promise<void> {
+  const { error } = await supabase
+    .from('league_join_requests')
+    .delete()
+    .eq('id', requestId);
+
+  if (error) throw new Error(error.message);
 }
 
 async function createTeamRequest(
@@ -93,77 +121,88 @@ async function createTeamRequest(
   message: string,
 ): Promise<TeamJoinRequest> {
   const league = await leagueService.getLeagueById(leagueId);
-
-  if (!league) {
-    throw new Error('Liga no encontrada.');
-  }
-
+  if (!league) throw new Error('Liga no encontrada.');
   if (league.status === 'paused') {
-    throw new Error(
-      'La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.',
-    );
+    throw new Error('La liga está suspendida. No se pueden enviar solicitudes mientras esté pausada.');
   }
 
   const team = await teamService.getTeamById(teamId);
+  if (!team) throw new Error('Equipo no encontrado.');
+  if (team.leagueId !== leagueId) throw new Error('El equipo no pertenece a esta liga.');
 
-  if (!team) {
-    throw new Error('Equipo no encontrado.');
-  }
+  const { data: existing, error: existingError } = await supabase
+    .from('team_join_requests')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .maybeSingle();
 
-  if (team.leagueId !== leagueId) {
-    throw new Error(
-      'El equipo no pertenece a esta liga.',
-    );
-  }
-
-  const requests = readTeamRequests();
-  const existing = requests.find(
-    (r) => r.teamId === teamId && r.userId === userId && r.status === 'pending',
-  );
+  if (existingError) throw new Error(existingError.message);
   if (existing) throw new Error('Ya tienes una solicitud pendiente para este equipo.');
 
-  const request: TeamJoinRequest = {
-    id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    teamId,
-    leagueId,
-    userId,
-    status: 'pending',
-    message,
-    createdAt: new Date().toISOString(),
-    resolvedAt: null,
-  };
-  writeTeamRequests([...requests, request]);
-  return request;
+  const { data, error } = await supabase
+    .from('team_join_requests')
+    .insert({
+      id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      team_id: teamId,
+      league_id: leagueId,
+      user_id: userId,
+      status: 'pending',
+      message,
+      resolved_at: null,
+    })
+    .select()
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? 'No se pudo crear la solicitud.');
+  return mapTeamRequest(data);
 }
 
 async function getTeamRequestsByTeam(teamId: string): Promise<TeamJoinRequest[]> {
-  return readTeamRequests()
-    .filter((r) => r.teamId === teamId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('team_join_requests')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapTeamRequest);
 }
 
 async function getTeamRequestsByUser(userId: string): Promise<TeamJoinRequest[]> {
-  return readTeamRequests()
-    .filter((r) => r.userId === userId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const { data, error } = await supabase
+    .from('team_join_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapTeamRequest);
 }
 
-function resolveTeamRequest(requestId: string, status: RequestStatus): TeamJoinRequest | null {
-  const requests = readTeamRequests();
-  let resolved: TeamJoinRequest | null = null;
-  const next = requests.map((r) => {
-    if (r.id === requestId) {
-      resolved = { ...r, status, resolvedAt: new Date().toISOString() };
-      return resolved;
-    }
-    return r;
-  });
-  writeTeamRequests(next);
-  return resolved;
+async function resolveTeamRequest(
+  requestId: string,
+  status: RequestStatus,
+): Promise<TeamJoinRequest | null> {
+  const { data, error } = await supabase
+    .from('team_join_requests')
+    .update({ status, resolved_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ? mapTeamRequest(data) : null;
 }
 
-function cancelTeamRequest(requestId: string): void {
-  writeTeamRequests(readTeamRequests().filter((r) => r.id !== requestId));
+async function cancelTeamRequest(requestId: string): Promise<void> {
+  const { error } = await supabase
+    .from('team_join_requests')
+    .delete()
+    .eq('id', requestId);
+
+  if (error) throw new Error(error.message);
 }
 
 export const joinRequestService = {
