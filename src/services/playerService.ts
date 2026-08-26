@@ -1,31 +1,71 @@
 import { Player, Position } from '@/types';
-import { storageService } from './storageService';
-import { STORAGE_KEYS } from './storageKeys';
-import { seedPlayers } from '@/data';
+import { supabase } from '@/lib/supabaseClient';
 
-function readPlayers(): Player[] {
-  return storageService.getCollection<Player>(STORAGE_KEYS.players, seedPlayers);
-}
-
-function writePlayers(players: Player[]): void {
-  storageService.setItem(STORAGE_KEYS.players, players);
+function mapPlayer(row: any): Player {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    teamId: row.team_id,
+    name: row.name,
+    position: row.position,
+    jerseyNumber: row.jersey_number,
+    photoUrl: row.photo_url,
+    stats: {
+      gamesPlayed: row.games_played ?? 0,
+      goals: row.goals ?? 0,
+      assists: row.assists ?? 0,
+      yellowCards: row.yellow_cards ?? 0,
+      redCards: row.red_cards ?? 0,
+      minutesPlayed: row.minutes_played ?? 0,
+      mvpAwards: row.mvp_awards ?? 0,
+    },
+  };
 }
 
 async function getPlayers(): Promise<Player[]> {
-  return readPlayers();
+  const { data, error } = await supabase
+    .from('players')
+    .select('*');
+  if (error) throw error;
+  return (data ?? []).map(mapPlayer);
 }
 
 async function getPlayersByTeam(teamId: string): Promise<Player[]> {
-  return readPlayers().filter((player) => player.teamId === teamId);
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('jersey_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(mapPlayer);
 }
 
-async function getPlayersByLeague(leagueId: string, teams: { id: string; leagueId: string }[]): Promise<Player[]> {
-  const leagueTeamIds = teams.filter((t) => t.leagueId === leagueId).map((t) => t.id);
-  return readPlayers().filter((p) => leagueTeamIds.includes(p.teamId));
+async function getPlayersByLeague(
+  leagueId: string,
+  teams: { id: string; leagueId: string }[],
+): Promise<Player[]> {
+  const teamIds = teams
+    .filter((team) => team.leagueId === leagueId)
+    .map((team) => team.id);
+
+  if (teamIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .in('team_id', teamIds);
+  if (error) throw error;
+  return (data ?? []).map(mapPlayer);
 }
 
 async function getPlayerById(id: string): Promise<Player | null> {
-  return readPlayers().find((player) => player.id === id) ?? null;
+  const { data, error } = await supabase
+    .from('players')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapPlayer(data) : null;
 }
 
 interface NewPlayerInput {
@@ -38,91 +78,96 @@ interface NewPlayerInput {
 }
 
 async function addPlayer(input: NewPlayerInput): Promise<Player> {
-  const players = readPlayers();
-  const newPlayer: Player = {
-    id: `player-${Date.now()}`,
-    userId: input.userId ?? null,
-    teamId: input.teamId,
-    name: input.name.trim(),
-    position: input.position,
-    jerseyNumber: input.jerseyNumber,
-    photoUrl: input.photoUrl ?? null,
-    stats: {
-      gamesPlayed: 0,
-      goals: 0,
-      assists: 0,
-      yellowCards: 0,
-      redCards: 0,
-      minutesPlayed: 0,
-      mvpAwards: 0,
-    },
-  };
-  writePlayers([...players, newPlayer]);
-  return newPlayer;
+  const id = `player-${Date.now()}`;
+
+  const { data, error } = await supabase
+    .from('players')
+    .insert({
+      id,
+      team_id: input.teamId,
+      user_id: input.userId ?? null,
+      name: input.name.trim(),
+      position: input.position,
+      jersey_number: input.jerseyNumber,
+      photo_url: input.photoUrl ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapPlayer(data);
 }
 
 interface UpdatePlayerInput extends Partial<Player> {
   resetStats?: boolean;
 }
 
-function getEmptySeasonStats(): Player['stats'] {
-  return {
-    gamesPlayed: 0,
-    goals: 0,
-    assists: 0,
-    yellowCards: 0,
-    redCards: 0,
-    minutesPlayed: 0,
-    mvpAwards: 0,
-  };
-}
-
-async function updatePlayer(
-  id: string,
-  updates: UpdatePlayerInput,
-): Promise<Player> {
-  const players = readPlayers();
-
-  const player = players.find(
-    (p) => p.id === id,
-  );
-
-  if (!player) {
-    throw new Error('Jugador no encontrado.');
-  }
+async function updatePlayer(id: string, updates: UpdatePlayerInput): Promise<Player> {
+  const existing = await getPlayerById(id);
+  if (!existing) throw new Error('Jugador no encontrado.');
 
   const { resetStats, ...playerUpdates } = updates;
+  const stats = resetStats
+    ? {
+        games_played: 0,
+        goals: 0,
+        assists: 0,
+        yellow_cards: 0,
+        red_cards: 0,
+        minutes_played: 0,
+        mvp_awards: 0,
+      }
+    : playerUpdates.stats
+      ? {
+          games_played: playerUpdates.stats.gamesPlayed,
+          goals: playerUpdates.stats.goals,
+          assists: playerUpdates.stats.assists,
+          yellow_cards: playerUpdates.stats.yellowCards,
+          red_cards: playerUpdates.stats.redCards,
+          minutes_played: playerUpdates.stats.minutesPlayed,
+          mvp_awards: playerUpdates.stats.mvpAwards,
+        }
+      : {};
 
-  const updated: Player = {
-    ...player,
-    ...playerUpdates,
-    id: player.id,
-    stats: resetStats
-      ? getEmptySeasonStats()
-      : playerUpdates.stats ?? player.stats,
+  const dbUpdates = {
+    team_id: playerUpdates.teamId,
+    user_id: playerUpdates.userId,
+    name: playerUpdates.name?.trim(),
+    position: playerUpdates.position,
+    jersey_number: playerUpdates.jerseyNumber,
+    photo_url: playerUpdates.photoUrl,
+    ...stats,
   };
 
-  writePlayers(
-    players.map((p) =>
-      p.id === id ? updated : p,
-    ),
-  );
+  Object.keys(dbUpdates).forEach((key) => {
+    if (dbUpdates[key as keyof typeof dbUpdates] === undefined) {
+      delete dbUpdates[key as keyof typeof dbUpdates];
+    }
+  });
 
-  return updated;
+  const { data, error } = await supabase
+    .from('players')
+    .update(dbUpdates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapPlayer(data);
 }
 
 async function removePlayer(id: string): Promise<void> {
-  writePlayers(readPlayers().filter((player) => player.id !== id));
-}
-
-async function getPlayersByLeagueDirect(leagueId: string, allTeams: { id: string; leagueId: string }[]): Promise<Player[]> {
-  return getPlayersByLeague(leagueId, allTeams);
+  const { error } = await supabase
+    .from('players')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
 }
 
 export const playerService = {
   getPlayers,
   getPlayersByTeam,
-  getPlayersByLeague: getPlayersByLeagueDirect,
+  getPlayersByLeague,
   getPlayerById,
   addPlayer,
   updatePlayer,
