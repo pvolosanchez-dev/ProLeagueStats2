@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 interface TeamBadgeProps {
   name: string;
   shortName: string;
@@ -19,23 +21,21 @@ export function TeamBadge({
   logoUrl,
   size = 'md',
 }: TeamBadgeProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showLogo = Boolean(logoUrl) && !imageFailed;
+
   return (
     <div
       className={`${sizeClasses[size]} flex shrink-0 items-center justify-center overflow-hidden rounded-lg font-bold text-white shadow-sm`}
-      style={{
-        backgroundColor: color,
-      }}
+      style={{ backgroundColor: color }}
       title={name}
     >
-      {logoUrl ? (
+      {showLogo ? (
         <img
-          src={logoUrl}
+          src={logoUrl!}
           alt={name}
           className="h-full w-full object-cover"
-          onError={(event) => {
-            event.currentTarget.style.display =
-              'none';
-          }}
+          onError={() => setImageFailed(true)}
         />
       ) : (
         shortName.slice(0, 3)
