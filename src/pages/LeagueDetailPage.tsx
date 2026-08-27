@@ -398,7 +398,7 @@ export function LeagueDetailPage() {
             }
           }
 
-          memberService.updateMemberTeam(
+          await memberService.updateMemberTeam(
             league.id,
             userId,
             null,
@@ -498,7 +498,7 @@ export function LeagueDetailPage() {
           });
         }
 
-        memberService.updateMemberTeam(
+        await memberService.updateMemberTeam(
           league.id,
           userId,
           teamId,
@@ -587,7 +587,7 @@ export function LeagueDetailPage() {
           return;
         }
 
-        memberService.updateMemberRole(
+        await memberService.updateMemberRole(
           league.id,
           memberUserId,
           newRole,
