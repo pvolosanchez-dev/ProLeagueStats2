@@ -77,8 +77,30 @@ interface NewPlayerInput {
   photoUrl?: string | null;
 }
 
+async function syncMembershipTeam(userId: string | null | undefined, teamId: string | null) {
+  if (!userId) return;
+
+  const { data: team, error: teamError } = await supabase
+    .from('teams')
+    .select('league_id')
+    .eq('id', teamId)
+    .maybeSingle();
+
+  if (teamError) throw teamError;
+  if (!team) throw new Error('No se encontró el equipo.');
+
+  const { error } = await supabase
+    .from('league_members')
+    .update({ team_id: teamId })
+    .eq('league_id', team.league_id)
+    .eq('user_id', userId)
+    .eq('status', 'active');
+
+  if (error) throw error;
+}
+
 async function addPlayer(input: NewPlayerInput): Promise<Player> {
-  const id = `player-${Date.now()}`;
+  const id = `player-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   const { data, error } = await supabase
     .from('players')
@@ -95,7 +117,10 @@ async function addPlayer(input: NewPlayerInput): Promise<Player> {
     .single();
 
   if (error) throw error;
-  return mapPlayer(data);
+
+  const player = mapPlayer(data);
+  await syncMembershipTeam(player.userId, player.teamId);
+  return player;
 }
 
 interface UpdatePlayerInput extends Partial<Player> {
@@ -153,15 +178,46 @@ async function updatePlayer(id: string, updates: UpdatePlayerInput): Promise<Pla
     .single();
 
   if (error) throw error;
-  return mapPlayer(data);
+
+  const player = mapPlayer(data);
+  if (player.userId && player.teamId) {
+    await syncMembershipTeam(player.userId, player.teamId);
+  }
+
+  return player;
 }
 
 async function removePlayer(id: string): Promise<void> {
+  const existing = await getPlayerById(id);
+  if (!existing) return;
+
   const { error } = await supabase
     .from('players')
     .delete()
     .eq('id', id);
   if (error) throw error;
+
+  if (existing.userId && existing.teamId) {
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .select('league_id')
+      .eq('id', existing.teamId)
+      .maybeSingle();
+
+    if (teamError) throw teamError;
+
+    if (team) {
+      const { error: membershipError } = await supabase
+        .from('league_members')
+        .update({ team_id: null })
+        .eq('league_id', team.league_id)
+        .eq('user_id', existing.userId)
+        .eq('status', 'active')
+        .eq('team_id', existing.teamId);
+
+      if (membershipError) throw membershipError;
+    }
+  }
 }
 
 export const playerService = {
