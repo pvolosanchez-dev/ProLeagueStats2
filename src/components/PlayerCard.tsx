@@ -1,6 +1,10 @@
+import { useNavigate } from 'react-router-dom';
 import { Player } from '@/types';
 import { TeamBadge } from './TeamBadge';
+import { Avatar } from './Avatar';
 import { Team } from '@/types';
+import { authService } from '@/services';
+import { useAsync } from '@/hooks';
 
 interface PlayerCardProps {
   player: Player;
@@ -15,16 +19,46 @@ const positionColors: Record<string, string> = {
 };
 
 export function PlayerCard({ player, team }: PlayerCardProps) {
+  const navigate = useNavigate();
+  const { data: user } = useAsync(
+    () => (player.userId ? authService.getUserById(player.userId) : Promise.resolve(null)),
+    [player.userId],
+  );
+
+  const handleOpenProfile = () => {
+    if (player.userId) {
+      navigate(`/dashboard/users/${player.userId}`);
+    }
+  };
+
   return (
     <div className="card p-4 transition-shadow hover:shadow-md">
       <div className="flex items-start gap-3">
         {team && (
-          <TeamBadge name={team.name} shortName={team.shortName} color={team.color} size="md" />
+          <TeamBadge
+            name={team.name}
+            shortName={team.shortName}
+            color={team.color}
+            logoUrl={team.logoUrl}
+            size="md"
+          />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-neutral-300">#{player.jerseyNumber}</span>
-            <h4 className="truncate text-sm font-semibold text-neutral-900">{player.name}</h4>
+          <div className="flex items-center gap-3">
+            {user && <Avatar user={user} size="sm" />}
+            <button
+              type="button"
+              onClick={handleOpenProfile}
+              disabled={!player.userId}
+              className="min-w-0 text-left disabled:cursor-default"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-neutral-300">#{player.jerseyNumber}</span>
+                <h4 className="truncate text-sm font-semibold text-neutral-900 hover:text-primary-600">
+                  {player.name}
+                </h4>
+              </div>
+            </button>
           </div>
           <span className={`badge mt-1 ${positionColors[player.position]}`}>{player.position}</span>
         </div>
