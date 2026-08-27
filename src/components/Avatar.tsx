@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { User } from '@/types';
 import { ROLE_LABELS } from '@/utils/roles';
 
@@ -19,6 +20,7 @@ export function Avatar({
   user,
   size = 'md',
 }: AvatarProps) {
+  const [imageFailed, setImageFailed] = useState(false);
   const initials = user.name
     .split(' ')
     .map((part) => part[0])
@@ -34,19 +36,15 @@ export function Avatar({
   return (
     <div
       className={`${sizeClasses[size]} flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white shadow-sm`}
-      style={{
-        backgroundColor: user.avatarColor,
-      }}
+      style={{ backgroundColor: user.avatarColor }}
       title={user.name}
     >
-      {imageUrl ? (
+      {imageUrl && !imageFailed ? (
         <img
           src={imageUrl}
           alt={user.name}
           className="h-full w-full object-cover"
-          onError={(event) => {
-            event.currentTarget.style.display = 'none';
-          }}
+          onError={() => setImageFailed(true)}
         />
       ) : (
         initials
