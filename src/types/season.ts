@@ -17,5 +17,6 @@ export interface Season {
   phase: SeasonPhase;
   startDate: string | null;
   endDate: string | null;
+  championTeamId: string | null;
   createdAt: string;
 }
