@@ -10,3 +10,4 @@ export * from './notification';
 export * from './auditLog';
 export * from './season';
 export * from './award';
+export * from './groupStage';
