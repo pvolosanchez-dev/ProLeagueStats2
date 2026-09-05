@@ -17,6 +17,5 @@ export { awardServiceV2 } from './awardServiceV2';
 export { statsService } from './statsService';
 export { matchPlayerStatsService } from './matchPlayerStatsService';
 export { imageService } from './imageService';
-export {
-  playoffSeriesService,
-} from './playoffSeriesService';
+export { groupStageService } from './groupStageService';
+export { playoffSeriesService } from './playoffSeriesService';
