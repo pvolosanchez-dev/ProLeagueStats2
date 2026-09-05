@@ -5,6 +5,7 @@ export type SeasonStatus =
 
 export type SeasonPhase =
   | 'regular'
+  | 'group'
   | 'playoff'
   | 'knockout';
 
