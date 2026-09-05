@@ -24,6 +24,7 @@ export function CreateLeaguePage() {
   const [groupPlayoffFormat, setGroupPlayoffFormat] = useState<'single-match' | 'home-and-away'>('single-match');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const knockoutTeams = groupCount * qualifiersPerGroup;
 
   const handleLogoChange = (file: File | null) => {
     if (!file) return;
@@ -40,7 +41,6 @@ export function CreateLeaguePage() {
     setError(null);
     if (!user) { setError('Debes iniciar sesión para crear una liga.'); return; }
     if (name.trim().length < 3) { setError('El nombre de la liga debe tener al menos 3 caracteres.'); return; }
-    const knockoutTeams = groupCount * qualifiersPerGroup;
     if (format === 'group-knockout' && knockoutTeams !== 8) { setError('Para generar automáticamente cuartos, semifinales y final debes tener exactamente 8 clasificados.'); return; }
     try {
       setSubmitting(true);
