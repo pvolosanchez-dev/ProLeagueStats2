@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { memberService } from './memberService';
 import { seasonService } from './seasonService';
 import { auditService } from './auditService';
+import { imageService } from './imageService';
 
 function mapLeague(row: any): League {
   return {
@@ -73,6 +74,22 @@ interface CreateLeagueInput {
   ownerId: string;
 }
 
+async function persistImage(
+  imageUrl: string | null | undefined,
+  bucket: 'avatars' | 'team-logos',
+  prefix: string,
+  fileName: string,
+): Promise<string | null> {
+  if (!imageUrl?.trim()) return null;
+
+  return imageService.uploadDataUrl(
+    imageUrl.trim(),
+    bucket,
+    prefix,
+    fileName,
+  );
+}
+
 async function createLeague(input: CreateLeagueInput): Promise<League> {
   const id = `league-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const inviteCode = input.inviteCode?.trim().toUpperCase() || generateInviteCode();
@@ -91,13 +108,22 @@ async function createLeague(input: CreateLeagueInput): Promise<League> {
       }
     : null;
 
+  // Nunca guardamos un data URL de la imagen en la tabla. Se sube primero a
+  // Supabase Storage y solo se persiste la URL pública permanente.
+  const logoUrl = await persistImage(
+    input.logoUrl,
+    'team-logos',
+    `leagues/${id}`,
+    'logo',
+  );
+
   const { data, error } = await supabase.from('leagues').insert({
     id,
     name: input.name.trim(),
     description: input.description.trim(),
     sport: 'Fútbol',
     color: input.color,
-    logo_url: input.logoUrl,
+    logo_url: logoUrl,
     is_public: input.isPublic,
     invite_code: inviteCode,
     format: input.format,
@@ -117,7 +143,7 @@ async function createLeague(input: CreateLeagueInput): Promise<League> {
     .update({ season_id: season.id }).eq('id', id).select().single();
   if (updateError) throw updateError;
 
-  await auditService.log(id, input.ownerId, 'league_created', `Liga "${input.name.trim()}" creada.`);
+  await auditService.log(id, input.ownerId, 'league_created', `Liga \"${input.name.trim()}\" creada.`);
   return mapLeague(updatedRow ?? data);
 }
 
@@ -126,7 +152,14 @@ async function updateLeague(id: string, updates: Partial<League>): Promise<Leagu
   if (updates.name !== undefined) payload.name = updates.name.trim();
   if (updates.description !== undefined) payload.description = updates.description.trim();
   if (updates.color !== undefined) payload.color = updates.color;
-  if (updates.logoUrl !== undefined) payload.logo_url = updates.logoUrl;
+  if (updates.logoUrl !== undefined) {
+    payload.logo_url = await persistImage(
+      updates.logoUrl,
+      'team-logos',
+      `leagues/${id}`,
+      'logo',
+    );
+  }
   if (updates.isPublic !== undefined) payload.is_public = updates.isPublic;
   if (updates.inviteCode !== undefined) payload.invite_code = updates.inviteCode.trim().toUpperCase();
   if (updates.format !== undefined) payload.format = updates.format;
@@ -155,7 +188,7 @@ async function deleteLeague(id: string, actorId: string): Promise<void> {
   if (league.ownerId !== actorId) throw new Error('Solo el propietario puede eliminar esta liga.');
   const { error } = await supabase.from('leagues').delete().eq('id', id);
   if (error) throw error;
-  await auditService.log(id, actorId, 'league_deleted', `Liga "${league.name}" eliminada.`);
+  await auditService.log(id, actorId, 'league_deleted', `Liga \"${league.name}\" eliminada.`);
 }
 
 async function getLeaguesByUser(userId: string): Promise<League[]> {
