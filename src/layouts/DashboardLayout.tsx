@@ -9,6 +9,7 @@ import {
   User as UserIcon,
   Plus,
   Bell,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAuth } from '@/hooks';
 import { Avatar, NotificationBell } from '@/components';
@@ -46,6 +47,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const handleLogout = async () => {
     await logout();
     navigate('/');
+  };
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/dashboard');
+    }
   };
 
   if (!user) return null;
@@ -150,7 +159,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-6 lg:px-8 lg:py-8">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="mb-5 inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-600 shadow-sm transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+          >
+            <ArrowLeft size={16} />
+            Volver
+          </button>
+          {children}
+        </main>
       </div>
     </div>
   );
