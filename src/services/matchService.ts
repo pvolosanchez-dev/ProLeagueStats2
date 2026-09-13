@@ -19,35 +19,21 @@ interface CreateMatchInput { leagueId: string; seasonId: string | null; round: n
 async function createMatch(input: CreateMatchInput, actorId: string): Promise<Match> {
   const league = await leagueService.getLeagueById(input.leagueId); if (!league) throw new Error('Liga no encontrada.');
   if (league.status === 'paused') throw new Error('La liga está suspendida. No se pueden crear partidos.');
-  const membership = await memberService.getMemberByUser(input.leagueId, actorId);
-  if (!membership || membership.status !== 'active' || (membership.role !== 'owner' && membership.role !== 'admin')) throw new Error('Solo el propietario o administrador puede crear partidos.');
-  if (!Number.isInteger(input.round) || input.round < 1) throw new Error('La jornada debe ser un número válido mayor que 0.');
-  if (!input.date.trim()) throw new Error('Debes indicar la fecha y hora del partido.');
-  if (!input.homeTeamId || !input.awayTeamId) throw new Error('Debes seleccionar ambos equipos.');
-  if (input.homeTeamId === input.awayTeamId) throw new Error('Un equipo no puede jugar contra sí mismo.');
-  const [homeTeam, awayTeam] = await Promise.all([teamService.getTeamById(input.homeTeamId), teamService.getTeamById(input.awayTeamId)]);
-  if (!homeTeam || !awayTeam) throw new Error('Uno de los equipos no existe.');
-  if (homeTeam.leagueId !== input.leagueId || awayTeam.leagueId !== input.leagueId) throw new Error('Los dos equipos deben pertenecer a esta liga.');
-  const { data: duplicates, error: duplicateError } = await supabase.from('matches').select('id').eq('league_id', input.leagueId).eq('round', input.round).or(`and(home_team_id.eq.${input.homeTeamId},away_team_id.eq.${input.awayTeamId}),and(home_team_id.eq.${input.awayTeamId},away_team_id.eq.${input.homeTeamId})`).limit(1);
-  if (duplicateError) throw duplicateError; if ((duplicates ?? []).length > 0) throw new Error('Ese enfrentamiento ya existe en esta jornada.');
-  const id = `match-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const { data, error } = await supabase.from('matches').insert({ id, league_id: input.leagueId, season_id: input.seasonId ?? league.seasonId ?? null, round: input.round, date: input.date, venue: input.venue.trim(), home_team_id: input.homeTeamId, away_team_id: input.awayTeamId, home_score: null, away_score: null, status: 'scheduled', mvp_player_id: null, went_to_overtime: false, phase: 'regular', playoff_round: null, playoff_series_id: null, playoff_leg: null, playoff_seed_home: null, playoff_seed_away: null }).select().single();
+  const membership = await memberService.getMemberByUser(input.leagueId, actorId); if (!membership || membership.status !== 'active' || (membership.role !== 'owner' && membership.role !== 'admin')) throw new Error('Solo el propietario o administrador puede crear partidos.');
+  if (!Number.isInteger(input.round) || input.round < 1) throw new Error('La jornada debe ser un número válido mayor que 0.'); if (!input.date.trim()) throw new Error('Debes indicar la fecha y hora del partido.'); if (!input.homeTeamId || !input.awayTeamId) throw new Error('Debes seleccionar ambos equipos.'); if (input.homeTeamId === input.awayTeamId) throw new Error('Un equipo no puede jugar contra sí mismo.');
+  const [homeTeam, awayTeam] = await Promise.all([teamService.getTeamById(input.homeTeamId), teamService.getTeamById(input.awayTeamId)]); if (!homeTeam || !awayTeam) throw new Error('Uno de los equipos no existe.'); if (homeTeam.leagueId !== input.leagueId || awayTeam.leagueId !== input.leagueId) throw new Error('Los dos equipos deben pertenecer a esta liga.');
+  const { data: duplicates, error: duplicateError } = await supabase.from('matches').select('id').eq('league_id', input.leagueId).eq('round', input.round).or(`and(home_team_id.eq.${input.homeTeamId},away_team_id.eq.${input.awayTeamId}),and(home_team_id.eq.${input.awayTeamId},away_team_id.eq.${input.homeTeamId})`).limit(1); if (duplicateError) throw duplicateError; if ((duplicates ?? []).length > 0) throw new Error('Ese enfrentamiento ya existe en esta jornada.');
+  const id = `match-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; const { data, error } = await supabase.from('matches').insert({ id, league_id: input.leagueId, season_id: input.seasonId ?? league.seasonId ?? null, round: input.round, date: input.date, venue: input.venue.trim(), home_team_id: input.homeTeamId, away_team_id: input.awayTeamId, home_score: null, away_score: null, status: 'scheduled', mvp_player_id: null, went_to_overtime: false, phase: 'regular', playoff_round: null, playoff_series_id: null, playoff_leg: null, playoff_seed_home: null, playoff_seed_away: null }).select().single();
   if (error) throw error; await auditService.log(input.leagueId, actorId, 'match_created', `Partido J${input.round} creado: ${homeTeam.name} vs ${awayTeam.name}.`); return mapMatch(data);
 }
 
 interface UpdateScoreInput { matchId: string; homeScore: number; awayScore: number; mvpPlayerId?: string | null; wentToOvertime: boolean; }
 async function updateScore(input: UpdateScoreInput, actorId: string): Promise<Match> {
-  const match = await getMatchById(input.matchId); if (!match) throw new Error('Partido no encontrado.');
-  const league = await leagueService.getLeagueById(match.leagueId); if (!league) throw new Error('Liga no encontrada.');
-  if (league.status === 'paused') throw new Error('La liga está suspendida. No se pueden modificar resultados mientras esté pausada.');
-  const membership = await memberService.getMemberByUser(match.leagueId, actorId);
-  if (!membership || membership.status !== 'active' || (membership.role !== 'owner' && membership.role !== 'admin')) throw new Error('Solo el propietario o administrador puede registrar resultados.');
-  if (!Number.isInteger(input.homeScore) || !Number.isInteger(input.awayScore) || input.homeScore < 0 || input.awayScore < 0) throw new Error('Los resultados deben ser números enteros mayores o iguales a 0.');
-  if (input.homeScore > 99 || input.awayScore > 99) throw new Error('El resultado no puede superar 99.');
+  const match = await getMatchById(input.matchId); if (!match) throw new Error('Partido no encontrado.'); const league = await leagueService.getLeagueById(match.leagueId); if (!league) throw new Error('Liga no encontrada.');
+  if (league.status === 'paused') throw new Error('La liga está suspendida. No se pueden modificar resultados mientras esté pausada.'); const membership = await memberService.getMemberByUser(match.leagueId, actorId); if (!membership || membership.status !== 'active' || (membership.role !== 'owner' && membership.role !== 'admin')) throw new Error('Solo el propietario o administrador puede registrar resultados.');
+  if (!Number.isInteger(input.homeScore) || !Number.isInteger(input.awayScore) || input.homeScore < 0 || input.awayScore < 0) throw new Error('Los resultados deben ser números enteros mayores o iguales a 0.'); if (input.homeScore > 99 || input.awayScore > 99) throw new Error('El resultado no puede superar 99.');
   if (input.mvpPlayerId) { const { playerService } = await import('./playerService'); const mvp = await playerService.getPlayerById(input.mvpPlayerId); if (!mvp || (mvp.teamId !== match.homeTeamId && mvp.teamId !== match.awayTeamId)) throw new Error('El MVP debe pertenecer a uno de los equipos del partido.'); }
-  const wasFinished = match.status === 'finished';
-  const { data, error } = await supabase.from('matches').update({ home_score: input.homeScore, away_score: input.awayScore, status: 'finished', mvp_player_id: input.mvpPlayerId ?? match.mvpPlayerId, went_to_overtime: input.wentToOvertime }).eq('id', input.matchId).select().single();
-  if (error) throw error; const updatedMatch = mapMatch(data);
+  const wasFinished = match.status === 'finished'; const { data, error } = await supabase.from('matches').update({ home_score: input.homeScore, away_score: input.awayScore, status: 'finished', mvp_player_id: input.mvpPlayerId ?? match.mvpPlayerId, went_to_overtime: input.wentToOvertime }).eq('id', input.matchId).select().single(); if (error) throw error; const updatedMatch = mapMatch(data);
   if (!wasFinished) {
     await auditService.log(match.leagueId, actorId, 'match_registered', `Resultado registrado: ${input.homeScore}-${input.awayScore}.`);
     if (updatedMatch.phase === 'group' && updatedMatch.seasonId) { const complete = await groupStageService.groupStageComplete(updatedMatch.seasonId); if (complete) { await seasonService.setPhase(updatedMatch.seasonId, 'playoff'); await groupStageService.generateKnockout(match.leagueId, updatedMatch.seasonId, actorId); await auditService.log(match.leagueId, actorId, 'group_stage_finished', 'Todos los grupos terminaron. Se calculó la clasificación y se generó automáticamente la eliminación.'); } }
@@ -57,27 +43,16 @@ async function updateScore(input: UpdateScoreInput, actorId: string): Promise<Ma
   return updatedMatch;
 }
 
-// Manual corrections are deliberately owner-only. This does not change the normal captain/admin result workflow.
 export interface OwnerEditMatchInput { matchId: string; round: number; date: string; venue: string; homeScore: number | null; awayScore: number | null; mvpPlayerId: string | null; wentToOvertime: boolean; }
 async function ownerEditMatch(input: OwnerEditMatchInput, actorId: string): Promise<Match> {
-  const match = await getMatchById(input.matchId); if (!match) throw new Error('Partido no encontrado.');
-  const membership = await memberService.getMemberByUser(match.leagueId, actorId);
-  if (!membership || membership.status !== 'active' || membership.role !== 'owner') throw new Error('Solo el dueño de la liga puede editar manualmente las jornadas.');
-  if (!Number.isInteger(input.round) || input.round < 1) throw new Error('La jornada debe ser un entero mayor que 0.');
-  if (!input.date.trim()) throw new Error('La fecha del partido es obligatoria.');
-  if (input.homeScore !== null && (!Number.isInteger(input.homeScore) || input.homeScore < 0 || input.homeScore > 99)) throw new Error('Marcador local inválido.');
-  if (input.awayScore !== null && (!Number.isInteger(input.awayScore) || input.awayScore < 0 || input.awayScore > 99)) throw new Error('Marcador visitante inválido.');
-  if (input.homeScore !== null && input.awayScore !== null && input.homeScore === input.awayScore && input.wentToOvertime === false) throw new Error('Un empate debe marcarse como tiempo extra o corregirse.');
-  const { data: duplicate, error: duplicateError } = await supabase.from('matches').select('id').eq('league_id', match.leagueId).eq('season_id', match.seasonId).eq('phase', match.phase).eq('round', input.round).neq('id', match.id).or(`and(home_team_id.eq.${match.homeTeamId},away_team_id.eq.${match.awayTeamId}),and(home_team_id.eq.${match.awayTeamId},away_team_id.eq.${match.homeTeamId})`).limit(1);
-  if (duplicateError) throw duplicateError; if ((duplicate ?? []).length) throw new Error('Ese enfrentamiento ya existe en la jornada indicada.');
+  const match = await getMatchById(input.matchId); if (!match) throw new Error('Partido no encontrado.'); const membership = await memberService.getMemberByUser(match.leagueId, actorId); if (!membership || membership.status !== 'active' || membership.role !== 'owner') throw new Error('Solo el dueño de la liga puede editar manualmente las jornadas.');
+  if (!Number.isInteger(input.round) || input.round < 1) throw new Error('La jornada debe ser un entero mayor que 0.'); if (!input.date.trim()) throw new Error('La fecha del partido es obligatoria.');
+  if (input.homeScore !== null && (!Number.isInteger(input.homeScore) || input.homeScore < 0 || input.homeScore > 99)) throw new Error('Marcador local inválido.'); if (input.awayScore !== null && (!Number.isInteger(input.awayScore) || input.awayScore < 0 || input.awayScore > 99)) throw new Error('Marcador visitante inválido.');
+  const { data: duplicate, error: duplicateError } = await supabase.from('matches').select('id').eq('league_id', match.leagueId).eq('season_id', match.seasonId).eq('phase', match.phase).eq('round', input.round).neq('id', match.id).or(`and(home_team_id.eq.${match.homeTeamId},away_team_id.eq.${match.awayTeamId}),and(home_team_id.eq.${match.awayTeamId},away_team_id.eq.${match.homeTeamId})`).limit(1); if (duplicateError) throw duplicateError; if ((duplicate ?? []).length) throw new Error('Ese enfrentamiento ya existe en la jornada indicada.');
   if (input.mvpPlayerId) { const { playerService } = await import('./playerService'); const mvp = await playerService.getPlayerById(input.mvpPlayerId); if (!mvp || (mvp.teamId !== match.homeTeamId && mvp.teamId !== match.awayTeamId)) throw new Error('El MVP debe pertenecer a uno de los equipos del partido.'); }
-  const status = input.homeScore === null || input.awayScore === null ? 'scheduled' : 'finished';
-  const { data, error } = await supabase.from('matches').update({ round: input.round, date: input.date, venue: input.venue.trim(), home_score: input.homeScore, away_score: input.awayScore, status, mvp_player_id: input.mvpPlayerId, went_to_overtime: input.wentToOvertime }).eq('id', input.matchId).select().single();
-  if (error) throw error;
-  await auditService.log(match.leagueId, actorId, 'match_manually_edited', `Partido ${match.id} corregido por el dueño. Jornada ${match.round} → ${input.round}.`);
-  return mapMatch(data);
+  const status = input.homeScore === null || input.awayScore === null ? 'scheduled' : 'finished'; const { data, error } = await supabase.from('matches').update({ round: input.round, date: input.date, venue: input.venue.trim(), home_score: input.homeScore, away_score: input.awayScore, status, mvp_player_id: input.mvpPlayerId, went_to_overtime: input.wentToOvertime }).eq('id', input.matchId).select().single(); if (error) throw error;
+  await auditService.log(match.leagueId, actorId, 'match_manually_edited', `Partido ${match.id} corregido por el dueño. Jornada ${match.round} → ${input.round}.`); return mapMatch(data);
 }
 
 async function deleteMatch(id: string, actorId: string): Promise<void> { const match = await getMatchById(id); if (!match) return; const league = await leagueService.getLeagueById(match.leagueId); if (league?.status === 'paused') throw new Error('La liga está suspendida.'); const membership = await memberService.getMemberByUser(match.leagueId, actorId); if (!membership || membership.status !== 'active' || (membership.role !== 'owner' && membership.role !== 'admin')) throw new Error('Solo el propietario o administrador puede eliminar partidos.'); const { error } = await supabase.from('matches').delete().eq('id', id); if (error) throw error; await auditService.log(match.leagueId, actorId, 'match_deleted', `Partido J${match.round} eliminado.`); }
-
 export const matchService = { getMatches, getMatchesByLeague, getMatchesByTeam, getMatchById, createMatch, updateScore, ownerEditMatch, deleteMatch };
