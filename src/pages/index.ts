@@ -10,4 +10,5 @@ export { UserProfilePage } from './UserProfilePage';
 export { CreateLeaguePage } from './CreateLeaguePage';
 export { AwardsPage } from './AwardsPage';
 export { SchedulePage } from './SchedulePage';
+export { ScheduleEditorPage } from './ScheduleEditorPage';
 export { GroupStagePage } from './GroupStagePage';
