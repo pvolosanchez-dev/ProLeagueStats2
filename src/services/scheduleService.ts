@@ -11,26 +11,91 @@ function mapMatch(row: any): Match { return { id: row.id, leagueId: row.league_i
 function createRegularMatch(leagueId: string, seasonId: string, round: number, homeTeamId: string, awayTeamId: string, offsetDays: number): Match { return { id: createId(), leagueId, seasonId, round, date: new Date(Date.now() + offsetDays * 86400000).toISOString(), venue: '', homeTeamId, awayTeamId, homeScore: null, awayScore: null, status: 'scheduled', mvpPlayerId: null, wentToOvertime: false, phase: 'regular', playoffRound: null, playoffSeriesId: null, playoffLeg: null, playoffSeedHome: null, playoffSeedAway: null }; }
 const pairKey = (a: string, b: string) => [a, b].sort().join('::');
 
-// Adds only pairings that do not already exist and places them into conflict-free new rounds.
+type Pair = [string, string];
+
+/**
+ * Packs missing pairings into the existing calendar first.
+ * This is important when teams are added after a schedule already exists:
+ * the old rounds are kept, and the new teams use their free slot in those
+ * rounds instead of creating a completely separate block of rounds.
+ */
 function packMissingPairings(teamIds: string[], existing: Match[], startRound: number, legs: 1 | 2): Match[] {
   const existingPairs = new Set(existing.map((m) => pairKey(m.homeTeamId, m.awayTeamId)));
-  const missing: Array<[string, string]> = [];
-  for (let i = 0; i < teamIds.length; i += 1) for (let j = i + 1; j < teamIds.length; j += 1) if (!existingPairs.has(pairKey(teamIds[i], teamIds[j]))) missing.push([teamIds[i], teamIds[j]]);
-  if (!missing.length) return [];
-  const packLeg = (pairs: Array<[string, string]>, firstRound: number, reverseHome: boolean) => {
-    const generated: Match[] = []; const rounds: Array<Set<string>> = [];
-    for (const [a, b] of pairs) {
-      let roundIndex = rounds.findIndex((used) => !used.has(a) && !used.has(b));
-      if (roundIndex === -1) { roundIndex = rounds.length; rounds.push(new Set<string>()); }
-      rounds[roundIndex].add(a); rounds[roundIndex].add(b);
-      generated.push(createRegularMatch('PLACEHOLDER', 'PLACEHOLDER', firstRound + roundIndex, reverseHome ? b : a, reverseHome ? a : b, (firstRound + roundIndex - 1) * 7));
+  const missing: Pair[] = [];
+  for (let i = 0; i < teamIds.length; i += 1) {
+    for (let j = i + 1; j < teamIds.length; j += 1) {
+      if (!existingPairs.has(pairKey(teamIds[i], teamIds[j]))) missing.push([teamIds[i], teamIds[j]]);
     }
-    return { generated, roundCount: rounds.length };
+  }
+  if (!missing.length) return [];
+
+  const maxExistingRound = existing.reduce((max, match) => Math.max(max, match.round), 0);
+  const firstRound = Math.min(startRound, maxExistingRound + 1);
+
+  const packLeg = (pairs: Pair[], reverseHome: boolean, initialRounds: Array<Set<string>>) => {
+    const rounds = initialRounds.map((used) => new Set(used));
+    const generated: Match[] = [];
+
+    for (const [a, b] of pairs) {
+      // First try every already-created round. A new match can be inserted
+      // there only if neither team is already playing in that round.
+      let roundIndex = rounds.findIndex((used) => !used.has(a) && !used.has(b));
+      if (roundIndex === -1) {
+        roundIndex = rounds.length;
+        rounds.push(new Set<string>());
+      }
+
+      rounds[roundIndex].add(a);
+      rounds[roundIndex].add(b);
+      const round = firstRound + roundIndex;
+      generated.push(createRegularMatch('PLACEHOLDER', 'PLACEHOLDER', round, reverseHome ? b : a, reverseHome ? a : b, (round - 1) * 7));
+    }
+
+    return { generated, rounds };
   };
-  const first = packLeg(missing, startRound, false);
+
+  // Preserve the existing rounds. We only track team occupancy because an
+  // existing round can accept another match whenever both teams are free.
+  const existingRounds: Array<Set<string>> = [];
+  for (let round = 1; round <= maxExistingRound; round += 1) existingRounds.push(new Set<string>());
+  existing.forEach((match) => {
+    if (match.round < 1) return;
+    while (existingRounds.length < match.round) existingRounds.push(new Set<string>());
+    existingRounds[match.round - 1].add(match.homeTeamId);
+    existingRounds[match.round - 1].add(match.awayTeamId);
+  });
+
+  // The first leg uses the free slots in rounds 1..maxExistingRound first.
+  // Only the overflow becomes genuinely new rounds.
+  const first = packLeg(missing, false, existingRounds);
   if (legs === 1) return first.generated;
-  const second = packLeg(missing, startRound + first.roundCount, true);
-  return [...first.generated, ...second.generated];
+
+  // For a two-leg calendar, create the reverse-leg matches after the first
+  // leg has been packed, again reusing any rounds that have free slots.
+  const secondStartRound = firstRound + first.rounds.length;
+  const second = (() => {
+    const secondExistingRounds = first.rounds.map((used) => new Set(used));
+    // Start the second leg after the rounds occupied by the first leg.
+    // This preserves the conventional separation between ida and vuelta.
+    while (secondExistingRounds.length < secondStartRound - firstRound) secondExistingRounds.push(new Set<string>());
+    const previousFirstRound = firstRound;
+    const originalFirstRound = firstRound;
+    const rounds = secondExistingRounds.slice(first.rounds.length);
+    const generated: Match[] = [];
+    const occupied = rounds;
+    for (const [a, b] of missing) {
+      let roundIndex = occupied.findIndex((used) => !used.has(a) && !used.has(b));
+      if (roundIndex === -1) { roundIndex = occupied.length; occupied.push(new Set<string>()); }
+      occupied[roundIndex].add(a);
+      occupied[roundIndex].add(b);
+      const round = secondStartRound + roundIndex;
+      generated.push(createRegularMatch('PLACEHOLDER', 'PLACEHOLDER', round, b, a, (round - 1) * 7));
+    }
+    void previousFirstRound; void originalFirstRound;
+    return generated;
+  })();
+
+  return [...first.generated, ...second];
 }
 
 async function generateSeasonSchedule(leagueId: string, seasonId: string, actorId: string, legs: 1 | 2 = 1): Promise<Match[]> {
@@ -63,8 +128,7 @@ async function generateSeasonSchedule(leagueId: string, seasonId: string, actorI
     await auditService.log(leagueId, actorId, 'schedule_generated', `Calendario generado: ${generated.length} partidos.`); return (data ?? []).map(mapMatch);
   }
 
-  const maxRound = existing.reduce((max, match) => Math.max(max, match.round), 0);
-  const missing = packMissingPairings(teamIds, existing, maxRound + 1, legs).map((m) => ({ ...m, leagueId, seasonId }));
+  const missing = packMissingPairings(teamIds, existing, 1, legs).map((m) => ({ ...m, leagueId, seasonId }));
   if (!missing.length) throw new Error('El calendario ya contiene todos los enfrentamientos posibles.');
   const rows = missing.map((m) => ({ id: m.id, league_id: leagueId, season_id: seasonId, round: m.round, date: m.date, venue: '', home_team_id: m.homeTeamId, away_team_id: m.awayTeamId, home_score: null, away_score: null, status: 'scheduled', mvp_player_id: null, went_to_overtime: false, phase: 'regular', playoff_round: null, playoff_series_id: null, playoff_leg: null, playoff_seed_home: null, playoff_seed_away: null }));
   const { data, error } = await supabase.from('matches').insert(rows).select('*'); if (error) throw error;
