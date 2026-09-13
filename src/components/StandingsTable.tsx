@@ -32,10 +32,7 @@ export function StandingsTable({ standings, teams }: StandingsTableProps) {
             if (!team) return null;
             const isPromotion = index < 3;
             return (
-              <tr
-                key={row.teamId}
-                className="border-b border-neutral-100 transition-colors hover:bg-neutral-50"
-              >
+              <tr key={row.teamId} className="border-b border-neutral-100 transition-colors hover:bg-neutral-50">
                 <td className="py-3 pl-4 pr-2">
                   <div className="flex items-center gap-2">
                     {isPromotion && <span className="h-6 w-1 rounded-full bg-success-500" />}
@@ -44,7 +41,7 @@ export function StandingsTable({ standings, teams }: StandingsTableProps) {
                 </td>
                 <td className="px-2 py-3">
                   <div className="flex items-center gap-2.5">
-                    <TeamBadge name={team.name} shortName={team.shortName} color={team.color} size="sm" />
+                    <TeamBadge name={team.name} shortName={team.shortName} color={team.color} logoUrl={team.logoUrl} size="sm" />
                     <span className="font-medium text-neutral-900">{team.name}</span>
                   </div>
                 </td>
@@ -54,13 +51,9 @@ export function StandingsTable({ standings, teams }: StandingsTableProps) {
                 <td className="px-2 py-3 text-center font-medium text-error-600">{row.lost}</td>
                 <td className="px-2 py-3 text-center text-neutral-600">{row.goalsFor}</td>
                 <td className="px-2 py-3 text-center text-neutral-600">{row.goalsAgainst}</td>
-                <td className="px-2 py-3 text-center font-medium text-neutral-700">
-                  {row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}
-                </td>
+                <td className="px-2 py-3 text-center font-medium text-neutral-700">{row.goalDifference > 0 ? `+${row.goalDifference}` : row.goalDifference}</td>
                 <td className="px-2 py-3 pr-4 text-center">
-                  <span className="inline-flex min-w-[2rem] justify-center rounded-md bg-primary-50 px-2 py-0.5 font-bold text-primary-700">
-                    {row.points}
-                  </span>
+                  <span className="inline-flex min-w-[2rem] justify-center rounded-md bg-primary-50 px-2 py-0.5 font-bold text-primary-700">{row.points}</span>
                 </td>
               </tr>
             );
